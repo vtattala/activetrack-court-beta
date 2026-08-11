@@ -7,6 +7,8 @@ export interface BallDetection {
   width: number;
   height: number;
   confidence: number;
+  motionConfidence?: number;
+  appearanceConfidence?: number;
   at: number;
 }
 
@@ -48,6 +50,10 @@ export interface SessionRecord {
 export interface TrackerEngineState {
   armed: boolean;
   armedAt: number;
+  enteredRim: boolean;
+  entryAt: number;
+  entryX: number;
+  entryConfidence: number;
   lastDetectedAt: number;
   lastShotAt: number;
   previous: BallDetection | null;
@@ -61,7 +67,15 @@ export interface TrackerStep {
   state: TrackerEngineState;
   shot: ShotKind | null;
   confidence: number;
-  reason: "none" | "rim-crossing" | "airball" | "lost" | "timeout" | "cooldown";
+  reason:
+    | "none"
+    | "rim-crossing"
+    | "rim-entry-exit"
+    | "rim-entry-lost"
+    | "airball"
+    | "lost"
+    | "timeout"
+    | "cooldown";
 }
 
 export interface VideoShotDecision {
@@ -85,6 +99,11 @@ export interface VideoAnalysisDiagnostics {
   duplicateFramesSkipped: number;
   largestFrameGapMs: number;
   cameraMotionEvents: number;
+  rimTrackedFrames: number;
+  rimTrackingLostFrames: number;
+  averageRimTrackingConfidence: number;
+  ballCandidateFrames: number;
+  ballTrackedFrames: number;
   requiresFullReview: boolean;
   warnings: string[];
 }

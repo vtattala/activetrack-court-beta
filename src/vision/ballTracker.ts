@@ -106,10 +106,31 @@ export function selectTrackedBall(
         }
       }
       score =
-        candidate.confidence * 0.42 +
-        continuity * 0.34 +
-        sizeConsistency * 0.14 +
-        directionConsistency * 0.1;
+        candidate.confidence * 0.34 +
+        continuity * 0.32 +
+        sizeConsistency * 0.12 +
+        directionConsistency * 0.1 +
+        (candidate.motionConfidence ?? 0.45) * 0.12;
+    } else {
+      const rimCenterX = rim.x + rim.width / 2;
+      const rimPlaneY = rim.y + rim.height * 0.48;
+      const distanceInRimWidths = Math.hypot(
+        (candidate.x - rimCenterX) / Math.max(0.001, rim.width),
+        (candidate.y - rimPlaneY) / Math.max(0.001, rim.width),
+      );
+      if (distanceInRimWidths > 9.5) continue;
+      const expectedWidth = rim.width * 0.5;
+      const sizeScore = 1 - clamp(
+        Math.abs(candidate.width - expectedWidth) / Math.max(0.001, expectedWidth * 1.45),
+        0,
+        1,
+      );
+      const proximity = 1 - clamp(distanceInRimWidths / 9.5, 0, 1);
+      score =
+        candidate.confidence * 0.5 +
+        (candidate.motionConfidence ?? 0.25) * 0.25 +
+        sizeScore * 0.15 +
+        proximity * 0.1;
     }
 
     const centeredOnStaticRim =
@@ -117,7 +138,8 @@ export function selectTrackedBall(
       candidate.x < rim.x + rim.width &&
       candidate.y > rim.y &&
       candidate.y < rim.y + rim.height &&
-      candidate.width > rim.width * 0.46;
+      candidate.width > rim.width * 0.46 &&
+      (candidate.motionConfidence ?? 0) < 0.45;
     if (centeredOnStaticRim) score -= hasFreshTrack ? 0.3 : 0.48;
 
     if (score > selectedScore) {
@@ -126,7 +148,7 @@ export function selectTrackedBall(
     }
   }
 
-  if (!selected || selectedScore < (hasFreshTrack ? 0.56 : 0.58)) {
+  if (!selected || selectedScore < (hasFreshTrack ? 0.52 : 0.44)) {
     const keepTrack = current !== null && elapsedSinceCurrent <= 600;
     return {
       detection: null,

@@ -14,6 +14,14 @@ function ball(x: number, y: number, at: number): BallDetection {
   return { x, y, at, width: 0.05, height: 0.05, confidence: 0.9 };
 }
 
+function movingBall(x: number, y: number, at: number): BallDetection {
+  return {
+    ...ball(x, y, at),
+    motionConfidence: 0.92,
+    appearanceConfidence: 0.86,
+  };
+}
+
 function step(
   state: TrackerEngineState,
   detection: BallDetection | null,
@@ -27,10 +35,13 @@ test("counts a downward crossing through the rim as a make", () => {
   state = step(state, ball(0.5, 0.42, 0), 0).state;
   state = step(state, ball(0.5, 0.17, 100), 100).state;
   state = step(state, ball(0.5, 0.12, 200), 200).state;
-  const result = step(state, ball(0.5, 0.25, 450), 450);
+  const entry = step(state, ball(0.5, 0.25, 450), 450);
+  assert.equal(entry.shot, null);
+  assert.equal(entry.state.enteredRim, true);
+  const result = step(entry.state, ball(0.5, 0.31, 500), 500);
   assert.equal(result.shot, "make");
   assert.ok(result.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE);
-  assert.equal(result.reason, "rim-crossing");
+  assert.equal(result.reason, "rim-entry-exit");
   assert.equal(result.state.armed, false);
 });
 
@@ -54,6 +65,19 @@ test("does not arm on an object that only descends through the rim", () => {
   assert.equal(result.state.armed, false);
 });
 
+test("acquires a motion-confirmed ball near the hoop and verifies entry plus exit", () => {
+  let state = createTrackerEngineState();
+  state = step(state, movingBall(0.5, 0.1, 0), 0).state;
+  state = step(state, movingBall(0.5, 0.15, 100), 100).state;
+  state = step(state, movingBall(0.5, 0.2, 200), 200).state;
+  assert.equal(state.armed, true);
+  state = step(state, movingBall(0.5, 0.24, 260), 260).state;
+  assert.equal(state.enteredRim, true);
+  const result = step(state, movingBall(0.5, 0.31, 340), 340);
+  assert.equal(result.shot, "make");
+  assert.equal(result.reason, "rim-entry-exit");
+});
+
 test("does not call a miss while the ball is still rising", () => {
   let state = createTrackerEngineState();
   state = step(state, ball(0.5, 0.44, 0), 0).state;
@@ -69,7 +93,7 @@ test("counts a descending shot that leaves the expanded rim lane as a miss", () 
   state = step(state, ball(0.5, 0.17, 100), 100).state;
   state = step(state, ball(0.5, 0.12, 200), 200).state;
   state = step(state, ball(0.84, 0.1, 300), 300).state;
-  const result = step(state, ball(0.84, 0.17, 550), 550);
+  const result = step(state, ball(0.84, 0.28, 550), 550);
   assert.equal(result.shot, "miss");
   assert.ok(result.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE);
 });
@@ -92,15 +116,16 @@ test("uses the interpolated rim-plane position instead of the next frame positio
   state = step(state, ball(0.48, 0.12, 200), 200).state;
   const result = step(state, ball(0.6, 0.3, 450), 450);
   assert.equal(result.shot, "make");
-  assert.equal(result.reason, "rim-crossing");
+  assert.equal(result.reason, "rim-entry-exit");
 });
 
 test("routes a near-edge rim crossing to review instead of automatic counting", () => {
   let state = createTrackerEngineState();
-  state = step(state, ball(0.57, 0.42, 0), 0).state;
-  state = step(state, ball(0.57, 0.17, 100), 100).state;
-  state = step(state, ball(0.57, 0.12, 200), 200).state;
-  const result = step(state, ball(0.57, 0.25, 450), 450);
+  state = step(state, ball(0.581, 0.42, 0), 0).state;
+  state = step(state, ball(0.581, 0.17, 100), 100).state;
+  state = step(state, ball(0.581, 0.12, 200), 200).state;
+  state = step(state, ball(0.581, 0.25, 450), 450).state;
+  const result = step(state, ball(0.581, 0.31, 500), 500);
   assert.equal(result.shot, "make");
   assert.ok(result.confidence < MIN_AUTOMATIC_DECISION_CONFIDENCE);
 });
@@ -110,12 +135,14 @@ test("suppresses duplicate shot events during the cooldown", () => {
   state = step(state, ball(0.5, 0.42, 0), 0).state;
   state = step(state, ball(0.5, 0.17, 100), 100).state;
   state = step(state, ball(0.5, 0.12, 200), 200).state;
-  const first = step(state, ball(0.5, 0.25, 450), 450);
+  state = step(state, ball(0.5, 0.25, 450), 450).state;
+  const first = step(state, ball(0.5, 0.31, 500), 500);
   assert.equal(first.shot, "make");
 
-  state = step(first.state, ball(0.5, 0.42, 550), 550).state;
-  state = step(state, ball(0.5, 0.17, 650), 650).state;
-  state = step(state, ball(0.5, 0.12, 750), 750).state;
-  const duplicate = step(state, ball(0.5, 0.25, 900), 900);
+  state = step(first.state, ball(0.5, 0.42, 650), 650).state;
+  state = step(state, ball(0.5, 0.17, 750), 750).state;
+  state = step(state, ball(0.5, 0.12, 850), 850).state;
+  state = step(state, ball(0.5, 0.25, 950), 950).state;
+  const duplicate = step(state, ball(0.5, 0.31, 1_000), 1_000);
   assert.equal(duplicate.shot, null);
 });

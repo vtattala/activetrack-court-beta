@@ -23,6 +23,14 @@ export interface VideoStabilityState {
   cameraMotionEvents: number;
 }
 
+export interface VideoTrackingQuality {
+  rimTrackedFrames?: number;
+  rimTrackingLostFrames?: number;
+  averageRimTrackingConfidence?: number;
+  ballCandidateFrames?: number;
+  ballTrackedFrames?: number;
+}
+
 export function createVideoStabilityState(): VideoStabilityState {
   return { highMotionStreak: 0, cooldownFrames: 0, cameraMotionEvents: 0 };
 }
@@ -111,6 +119,7 @@ export function buildVideoAnalysisDiagnostics(
   duplicateFramesSkipped: number,
   largestFrameGapMs: number,
   cameraMotionEvents = 0,
+  tracking: VideoTrackingQuality = {},
 ): VideoAnalysisDiagnostics {
   const totalSamples = framesAnalyzed + duplicateFramesSkipped;
   const duplicateRatio = totalSamples > 0
@@ -127,9 +136,24 @@ export function buildVideoAnalysisDiagnostics(
       "The video contains a long frame gap, so every detected shot requires review.",
     );
   }
-  if (cameraMotionEvents > 0) {
+  const rimTrackedFrames = tracking.rimTrackedFrames ?? 0;
+  const rimTrackingLostFrames = tracking.rimTrackingLostFrames ?? 0;
+  const rimTrackingSamples = rimTrackedFrames + rimTrackingLostFrames;
+  const rimLostRatio = rimTrackingSamples > 0
+    ? rimTrackingLostFrames / rimTrackingSamples
+    : 1;
+  const rimTrackingVerified =
+    rimTrackingSamples > 0 &&
+    rimLostRatio <= 0.12 &&
+    (tracking.averageRimTrackingConfidence ?? 0) >= 0.56;
+  if (cameraMotionEvents > 0 && !rimTrackingVerified) {
     warnings.push(
-      "Camera movement or a cut was detected, so the marked rim may not stay aligned. Every detected shot requires review.",
+      "Camera movement or a cut exceeded the hoop track, so every detected shot requires review.",
+    );
+  }
+  if (rimTrackingSamples > 0 && rimLostRatio > 0.12) {
+    warnings.push(
+      "The hoop could not be locked in enough frames, so every detected shot requires review.",
     );
   }
   return {
@@ -137,6 +161,11 @@ export function buildVideoAnalysisDiagnostics(
     duplicateFramesSkipped,
     largestFrameGapMs,
     cameraMotionEvents,
+    rimTrackedFrames,
+    rimTrackingLostFrames,
+    averageRimTrackingConfidence: tracking.averageRimTrackingConfidence ?? 0,
+    ballCandidateFrames: tracking.ballCandidateFrames ?? 0,
+    ballTrackedFrames: tracking.ballTrackedFrames ?? 0,
     requiresFullReview: warnings.length > 0,
     warnings,
   };

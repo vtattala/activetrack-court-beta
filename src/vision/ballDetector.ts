@@ -36,8 +36,8 @@ export function detectOrangeBallCandidates(
   "worklet";
   const hsv = Mat.create(0, 0, DataTypes.CV_8U);
   const mask = Mat.create(0, 0, DataTypes.CV_8U);
-  const lowerOrange = Scalar.create(2, 72, 48);
-  const upperOrange = Scalar.create(35, 255, 255);
+  const lowerOrange = Scalar.create(0, 42, 34);
+  const upperOrange = Scalar.create(42, 255, 255);
   const kernelSize = Size.create(3, 3);
   const kernel = OpenCV.getStructuringElement(MorphShapes.MORPH_ELLIPSE, kernelSize);
   const contours = MatVector.create();
@@ -55,7 +55,7 @@ export function detectOrangeBallCandidates(
     );
 
     const frameArea = Math.max(1, width * height);
-    const minimumArea = Math.max(7, frameArea * 0.00012);
+    const minimumArea = Math.max(3, frameArea * 0.000035);
     const maximumArea = frameArea * 0.12;
     const candidates: BallDetection[] = [];
 
@@ -75,8 +75,8 @@ export function detectOrangeBallCandidates(
       const roundness = 1 - clamp(Math.abs(1 - ratio), 0, 1);
 
       const validShape =
-        rect.width >= Math.max(3, width * 0.009) &&
-        rect.height >= Math.max(3, height * 0.014) &&
+        rect.width >= 2 &&
+        rect.height >= 2 &&
         rect.width <= width * 0.26 &&
         rect.height <= height * 0.4 &&
         ratio >= 0.4 &&
@@ -99,6 +99,8 @@ export function detectOrangeBallCandidates(
         width: rect.width / width,
         height: rect.height / height,
         confidence,
+        appearanceConfidence: confidence,
+        motionConfidence: 0.35,
         at,
       });
     }

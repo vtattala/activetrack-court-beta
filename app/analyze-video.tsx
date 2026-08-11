@@ -178,6 +178,7 @@ export default function AnalyzeVideoScreen() {
     try {
       const analysis = await analyzeBasketballVideo(video.uri, rim, {
         durationSeconds: preview.durationSeconds,
+        rimCalibrationTimeSeconds: preview.atSeconds,
         isCancelled: () => cancelledRef.current || analysisCancelledRef.current,
         onProgress: (completed, total) => {
           if (!cancelledRef.current) setProgress({ completed, total });
@@ -333,7 +334,7 @@ export default function AnalyzeVideoScreen() {
             {rim ? (
               <View style={[styles.calibrationStatus, rimValidationError && styles.calibrationStatusError]}>
                 <Text style={[styles.calibrationStatusText, rimValidationError && styles.calibrationStatusTextError]}>
-                  {rimValidationError ?? "RIM CALIBRATION READY · KEEP THIS BOX ALIGNED FOR THE ENTIRE VIDEO"}
+                  {rimValidationError ?? "RIM LOCK READY · THE BOX WILL FOLLOW THE HOOP THROUGH EVERY FRAME"}
                 </Text>
               </View>
             ) : null}
@@ -394,16 +395,26 @@ export default function AnalyzeVideoScreen() {
                   <Text style={styles.qualityWarningText} key={warning}>{warning}</Text>
                 ))}
               </View>
-            ) : (
-              <Text style={styles.qualityReady}>
-                FRAME TIMING VERIFIED · {result.framesAnalyzed} UNIQUE FRAMES AT {result.diagnostics.analysisFps} FPS
-              </Text>
-            )}
+            ) : null}
+            <Text style={styles.qualityReady}>
+              FRAME TIMING VERIFIED · {result.framesAnalyzed} UNIQUE FRAMES AT {result.diagnostics.analysisFps} FPS
+            </Text>
+            <Text style={styles.qualityReady}>
+              HOOP LOCK {Math.round(
+                (result.diagnostics.rimTrackedFrames /
+                  Math.max(
+                    1,
+                    result.diagnostics.rimTrackedFrames + result.diagnostics.rimTrackingLostFrames,
+                  )) * 100,
+              )}% · BALL TRACKED IN {result.diagnostics.ballTrackedFrames} FRAMES
+            </Text>
 
             {result.decisions.length === 0 ? (
               <View style={styles.noShots}>
                 <Text style={styles.noShotsTitle}>No complete shot trajectories found</Text>
-                <Text style={styles.noShotsBody}>Adjust the rim box, confirm the basketball is orange and fully visible, then analyze again.</Text>
+                <Text style={styles.noShotsBody}>
+                  No ball entered or exited the marked hoop corridor. Re-mark the inside edge of the rim on a clear frame, then analyze again.
+                </Text>
               </View>
             ) : (
               <View style={styles.decisionList}>
@@ -511,6 +522,8 @@ function SmallButton({
 function formatDecisionReason(reason: string): string {
   switch (reason) {
     case "rim-crossing": return "center crossed rim plane";
+    case "rim-entry-exit": return "ball entered the rim and exited below the net";
+    case "rim-entry-lost": return "rim entry found; net exit needs review";
     case "airball": return "outside rim opening";
     case "lost": return "ball lost after release";
     case "timeout": return "incomplete trajectory";

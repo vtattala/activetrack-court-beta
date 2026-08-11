@@ -37,8 +37,8 @@ import {
 } from "./videoAnalysisPolicy";
 
 export { IMPORT_ANALYSIS_FPS, MAX_IMPORT_DURATION_SECONDS };
-const THUMBNAIL_WIDTH = 320;
-const THUMBNAIL_HEIGHT = 180;
+const THUMBNAIL_WIDTH = 640;
+const THUMBNAIL_HEIGHT = 640;
 const THUMBNAIL_CHUNK_SIZE = 12;
 
 export interface VideoPreview {
@@ -51,6 +51,7 @@ export interface VideoPreview {
 
 export interface VideoAnalysisOptions {
   durationSeconds?: number;
+  rimCalibrationTimeSeconds?: number;
   onProgress?: (completedFrames: number, totalFrames: number) => void;
   isCancelled?: () => boolean;
 }
@@ -218,6 +219,8 @@ export async function analyzeBasketballVideo(
   let previousTimestampMs: number | null = null;
   let previousGray: ReturnType<typeof Mat.create> | null = null;
   let stability = createVideoStabilityState();
+  let ballCandidateFrames = 0;
+  let ballTrackedFrames = 0;
 
   try {
     const durationSeconds = options.durationSeconds && options.durationSeconds > 0
@@ -288,8 +291,10 @@ export async function analyzeBasketballVideo(
               source.rows,
               timestamp,
             );
+            if (candidates.length > 0) ballCandidateFrames += 1;
             const selection = selectTrackedBall(candidates, visionTrack, rim, timestamp);
             visionTrack = selection.state;
+            if (selection.detection) ballTrackedFrames += 1;
 
             const step = stepTracker(tracker, selection.detection, rim, timestamp);
             tracker = step.state;
@@ -341,6 +346,13 @@ export async function analyzeBasketballVideo(
       duplicateFramesSkipped,
       largestFrameGapMs,
       stability.cameraMotionEvents,
+      {
+        rimTrackedFrames: stability.cameraMotionEvents === 0 ? framesAnalyzed : 0,
+        rimTrackingLostFrames: stability.cameraMotionEvents === 0 ? 0 : framesAnalyzed,
+        averageRimTrackingConfidence: stability.cameraMotionEvents === 0 ? 1 : 0,
+        ballCandidateFrames,
+        ballTrackedFrames,
+      },
     );
     return {
       durationSeconds,
