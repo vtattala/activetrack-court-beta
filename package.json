@@ -1,46 +1,78 @@
 {
-  "name": "activetrack-beta",
+  "name": "activetrack-native",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": ">=22.13.0"
-  },
+  "main": "expo-router/entry",
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build",
-    "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "web": "expo start --web",
+    "prebuild": "expo prebuild",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "doctor": "expo-doctor",
+    "build:sites": "expo export --platform web --output-dir dist/client && node scripts/prepare-sites-build.mjs"
   },
   "dependencies": {
-    "drizzle-orm": "0.45.2",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "@expo/metro-runtime": "~57.0.9",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@shopify/react-native-skia": "2.6.2",
+    "expo": "~57.0.12",
+    "expo-constants": "~57.0.9",
+    "expo-dev-client": "~57.0.11",
+    "expo-file-system": "~57.0.2",
+    "expo-haptics": "~57.0.1",
+    "expo-image-manipulator": "~57.0.9",
+    "expo-image-picker": "~57.0.9",
+    "expo-linking": "~57.0.5",
+    "expo-media-library": "~57.0.3",
+    "expo-router": "~57.0.12",
+    "expo-sharing": "~57.0.11",
+    "expo-splash-screen": "~57.0.6",
+    "expo-status-bar": "~57.0.1",
+    "expo-video": "~57.0.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-fast-opencv": "1.0.1",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-nitro-image": "0.15.1",
+    "react-native-nitro-modules": "0.36.5",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-vision-camera": "5.2.2",
+    "react-native-vision-camera-resizer": "5.2.2",
+    "react-native-vision-camera-skia": "5.2.2",
+    "react-native-vision-camera-worklets": "5.2.2",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.10.1",
+    "react-native-worklets-core": "1.6.3"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@eslint/js": "9.39.4",
-    "@next/eslint-plugin-next": "16.2.6",
-    "@tailwindcss/postcss": "4.2.1",
-    "@types/node": "22.19.19",
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
-    "eslint": "9.39.4",
-    "eslint-plugin-jsx-a11y": "6.10.2",
-    "eslint-plugin-react": "7.37.5",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "globals": "16.4.0",
-    "react-server-dom-webpack": "19.2.6",
-    "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.59.3",
-    "vinext": "1.0.0-beta.2",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "@types/node": "^26.2.0",
+    "@types/react": "~19.2.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.1",
+    "expo-doctor": "^1.20.1",
+    "tsx": "^4.20.6",
+    "typescript": "~6.0.3"
   },
-  "type": "module"
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-nitro-image"
+        ]
+      }
+    }
+  },
+  "allowScripts": {
+    "@shopify/react-native-skia@2.6.2": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true
+  }
 }

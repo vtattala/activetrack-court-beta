@@ -1,0 +1,159 @@
+import type { BallDetection, RimCalibration } from "../../types/tracking";
+
+export interface VisionTrackState {
+  previous: BallDetection | null;
+  current: BallDetection | null;
+  velocityX?: number;
+  velocityY?: number;
+  confirmedFrames?: number;
+  missingFrames?: number;
+}
+
+export interface VisionSelection {
+  detection: BallDetection | null;
+  state: VisionTrackState;
+}
+
+export function createVisionTrackState(): VisionTrackState {
+  "worklet";
+  return {
+    previous: null,
+    current: null,
+    velocityX: 0,
+    velocityY: 0,
+    confirmedFrames: 0,
+    missingFrames: 0,
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  "worklet";
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+/**
+ * Selects one candidate using predicted motion, size consistency and the rim
+ * calibration. A low-quality discontinuous candidate is rejected instead of
+ * being forced into the shot state machine.
+ */
+export function selectTrackedBall(
+  candidates: BallDetection[],
+  track: VisionTrackState,
+  rim: RimCalibration,
+  at: number,
+): VisionSelection {
+  "worklet";
+  const current = track.current;
+  const previous = track.previous;
+  const elapsedSinceCurrent = current ? at - current.at : Number.POSITIVE_INFINITY;
+  const hasFreshTrack = current !== null && elapsedSinceCurrent >= 0 && elapsedSinceCurrent <= 600;
+
+  let predictedX = current?.x ?? 0;
+  let predictedY = current?.y ?? 0;
+  let velocityX = track.velocityX ?? 0;
+  let velocityY = track.velocityY ?? 0;
+  if (hasFreshTrack && current) {
+    if (
+      Math.abs(velocityX) < 0.0001 &&
+      Math.abs(velocityY) < 0.0001 &&
+      previous &&
+      current.at > previous.at
+    ) {
+      const seconds = (current.at - previous.at) / 1_000;
+      velocityX = (current.x - previous.x) / seconds;
+      velocityY = (current.y - previous.y) / seconds;
+    }
+    const secondsAhead = elapsedSinceCurrent / 1_000;
+    predictedX = current.x + velocityX * secondsAhead;
+    predictedY = current.y + velocityY * secondsAhead;
+  }
+
+  let selected: BallDetection | null = null;
+  let selectedScore = -1;
+
+  for (const candidate of candidates) {
+    let score = candidate.confidence;
+    if (hasFreshTrack && current) {
+      const distance = Math.hypot(candidate.x - predictedX, candidate.y - predictedY);
+      const sizeDelta = Math.abs(candidate.width - current.width) +
+        Math.abs(candidate.height - current.height);
+      const speed = Math.hypot(velocityX, velocityY);
+      const allowedJump = clamp(0.12 + speed * (elapsedSinceCurrent / 1_000) * 0.72, 0.16, 0.43);
+      const continuity = 1 - clamp(distance / allowedJump, 0, 1);
+      const sizeConsistency = 1 - clamp(sizeDelta / 0.18, 0, 1);
+      const observedX = candidate.x - current.x;
+      const observedY = candidate.y - current.y;
+      const observedLength = Math.hypot(observedX, observedY);
+      const expectedLength = Math.hypot(velocityX, velocityY);
+      const directionConsistency = observedLength > 0.002 && expectedLength > 0.02
+        ? clamp(
+            (observedX * velocityX + observedY * velocityY) /
+              (observedLength * expectedLength) * 0.5 + 0.5,
+            0,
+            1,
+          )
+        : 0.7;
+
+      if (distance > allowedJump) {
+        const prolongedGap = (track.missingFrames ?? 0) >= 2 || elapsedSinceCurrent >= 350;
+        const plausibleReacquisition = distance <= allowedJump * 2.1;
+        if (
+          candidate.confidence < 0.93 ||
+          !prolongedGap ||
+          !plausibleReacquisition
+        ) {
+          continue;
+        }
+      }
+      score =
+        candidate.confidence * 0.42 +
+        continuity * 0.34 +
+        sizeConsistency * 0.14 +
+        directionConsistency * 0.1;
+    }
+
+    const centeredOnStaticRim =
+      candidate.x > rim.x &&
+      candidate.x < rim.x + rim.width &&
+      candidate.y > rim.y &&
+      candidate.y < rim.y + rim.height &&
+      candidate.width > rim.width * 0.46;
+    if (centeredOnStaticRim) score -= hasFreshTrack ? 0.3 : 0.48;
+
+    if (score > selectedScore) {
+      selectedScore = score;
+      selected = candidate;
+    }
+  }
+
+  if (!selected || selectedScore < (hasFreshTrack ? 0.56 : 0.58)) {
+    const keepTrack = current !== null && elapsedSinceCurrent <= 600;
+    return {
+      detection: null,
+      state: keepTrack
+        ? { ...track, missingFrames: (track.missingFrames ?? 0) + 1 }
+        : createVisionTrackState(),
+    };
+  }
+
+  const seconds = current && selected.at > current.at
+    ? (selected.at - current.at) / 1_000
+    : 0;
+  const measuredVelocityX = current && seconds > 0 ? (selected.x - current.x) / seconds : 0;
+  const measuredVelocityY = current && seconds > 0 ? (selected.y - current.y) / seconds : 0;
+  const blend = current ? 0.42 : 1;
+  const nextVelocityX = clamp(velocityX * (1 - blend) + measuredVelocityX * blend, -4, 4);
+  const nextVelocityY = clamp(velocityY * (1 - blend) + measuredVelocityY * blend, -4, 4);
+
+  return {
+    detection: selected,
+    state: {
+      previous: current,
+      current: selected,
+      velocityX: nextVelocityX,
+      velocityY: nextVelocityY,
+      confirmedFrames: (track.confirmedFrames ?? 0) + 1,
+      missingFrames: 0,
+    },
+  };
+}

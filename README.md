@@ -1,100 +1,27 @@
-# vinext-starter
+# ActiveTrack Native
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+ActiveTrack is an Expo SDK 57 basketball camera app that counts makes and misses in real time. Camera frames stay on the device and are processed by VisionCamera 5, Skia, GPU resizing, worklets, and Fast OpenCV. The live view tracks the ball's predicted trajectory and the dominant moving player independently, so player appearance is never used as a basketball signal.
 
-## Prerequisites
+The recorded-video route accepts a device-library video up to five minutes long, lets the user choose a clear calibration frame and mark the fixed rim, then runs the same ball-candidate, trajectory, confidence, and shot-decision pipeline used by the live camera. Native and localhost analysis sample at 15 FPS and use actual decoded-frame timestamps. Repeated frames, long timing gaps, camera movement, and cuts disable automatic scoring. Makes are decided from the ball's interpolated downward crossing of the marked rim plane. Adjacent crossings are misses, and every result can be replayed and corrected.
 
-- Node.js `>=22.13.0`
+For best tracking, lock the phone in landscape 10–20 feet from the hoop, keep the rim and the player's full body visible, avoid zooming or panning, and use even court lighting. No vision system can promise zero mistakes on arbitrary footage; the beta intentionally favors review over silently recording a questionable result.
 
-## Quick Start
+## Run locally
 
-```bash
-npm install
-npm run dev
-npm run build
-```
+For the localhost preview, run `npm run web` and open `http://localhost:8081`. The browser supports demo sessions, history, manual corrections, rim calibration, and local recorded-video analysis. Its camera card is an explicitly labeled simulation.
 
-This starter does not use `wrangler.jsonc`.
+The real-time camera pipeline uses native frame processors and requires an Expo development build. Expo Go cannot load the tracking modules.
 
-## Included Shape
+1. Install dependencies with `npm install`.
+2. Generate native projects with `npx expo prebuild`.
+3. On macOS, build the iOS development client with `npx expo run:ios --device`; from Windows, use an EAS development build.
+4. Start Metro with `npx expo start --dev-client`.
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## Validate
 
-## Workspace Auth Headers
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run doctor`
 
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Before App Store submission, replace the placeholder bundle identifier in `app.json` and connect the project to the correct Apple Developer account with EAS.
