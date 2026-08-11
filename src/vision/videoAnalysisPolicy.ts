@@ -27,6 +27,7 @@ export interface VideoTrackingQuality {
   rimTrackedFrames?: number;
   rimTrackingLostFrames?: number;
   averageRimTrackingConfidence?: number;
+  rimGlobalReacquisitions?: number;
   ballCandidateFrames?: number;
   ballTrackedFrames?: number;
 }
@@ -164,6 +165,7 @@ export function buildVideoAnalysisDiagnostics(
     rimTrackedFrames,
     rimTrackingLostFrames,
     averageRimTrackingConfidence: tracking.averageRimTrackingConfidence ?? 0,
+    rimGlobalReacquisitions: tracking.rimGlobalReacquisitions ?? 0,
     ballCandidateFrames: tracking.ballCandidateFrames ?? 0,
     ballTrackedFrames: tracking.ballTrackedFrames ?? 0,
     requiresFullReview: warnings.length > 0,

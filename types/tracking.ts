@@ -102,6 +102,7 @@ export interface VideoAnalysisDiagnostics {
   rimTrackedFrames: number;
   rimTrackingLostFrames: number;
   averageRimTrackingConfidence: number;
+  rimGlobalReacquisitions: number;
   ballCandidateFrames: number;
   ballTrackedFrames: number;
   requiresFullReview: boolean;

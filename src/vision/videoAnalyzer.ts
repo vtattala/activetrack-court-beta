@@ -363,6 +363,7 @@ export async function analyzeBasketballVideo(
         rimTrackedFrames: stability.cameraMotionEvents === 0 ? framesAnalyzed : 0,
         rimTrackingLostFrames: stability.cameraMotionEvents === 0 ? 0 : framesAnalyzed,
         averageRimTrackingConfidence: stability.cameraMotionEvents === 0 ? 1 : 0,
+        rimGlobalReacquisitions: 0,
         ballCandidateFrames,
         ballTrackedFrames,
       },

@@ -406,7 +406,7 @@ export default function AnalyzeVideoScreen() {
                     1,
                     result.diagnostics.rimTrackedFrames + result.diagnostics.rimTrackingLostFrames,
                   )) * 100,
-              )}% · BALL TRACKED IN {result.diagnostics.ballTrackedFrames} FRAMES
+              )}% · CAMERA RELOCKS {result.diagnostics.rimGlobalReacquisitions} · BALL TRACKED IN {result.diagnostics.ballTrackedFrames} FRAMES
             </Text>
 
             {result.decisions.length === 0 ? (

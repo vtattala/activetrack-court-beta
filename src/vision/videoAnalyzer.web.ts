@@ -13,6 +13,10 @@ import { detectBasketballCandidates } from "./pixelBallDetector";
 import { selectHoopZoneCandidates } from "./hoopZone";
 import { createRimTrackState, stepRimTracker } from "./rimTracker";
 import {
+  alignTrackerEngineToRimShift,
+  alignVisionTrackToRimShift,
+} from "./trackingAlignment";
+import {
   applyVideoQualityGate,
   buildVideoAnalysisDiagnostics,
   buildVideoFrameTimes,
@@ -257,6 +261,7 @@ export async function analyzeBasketballVideo(
         timestamp,
         rimTrack.rim,
       );
+      const lostRimFramesBeforeStep = rimTrack.consecutiveLostFrames;
       const rimStep = stepRimTracker(
         detectionFrame.gray,
         canvas.width,
@@ -264,6 +269,22 @@ export async function analyzeBasketballVideo(
         rimTrack,
       );
       rimTrack = rimStep.state;
+      if (rimStep.found && lostRimFramesBeforeStep < 4) {
+        visionTrack = alignVisionTrackToRimShift(
+          visionTrack,
+          rimStep.displacementX,
+          rimStep.displacementY,
+        );
+        tracker = alignTrackerEngineToRimShift(
+          tracker,
+          rimStep.displacementX,
+          rimStep.displacementY,
+        );
+      } else if (lostRimFramesBeforeStep >= 4) {
+        const lastShotAt = tracker.lastShotAt;
+        visionTrack = createVisionTrackState();
+        tracker = { ...createTrackerEngineState(), lastShotAt };
+      }
 
       let changedPixels = 0;
       if (previousGray && previousGray.length === detectionFrame.gray.length) {
@@ -278,6 +299,21 @@ export async function analyzeBasketballVideo(
         : 0;
       stability = stepVideoStability(stability, changedPixelRatio);
       previousGray = detectionFrame.gray;
+
+      if (!rimStep.found) {
+        if (rimStep.state.consecutiveLostFrames >= 2) {
+          const lastShotAt = tracker.lastShotAt;
+          visionTrack = createVisionTrackState();
+          tracker = { ...createTrackerEngineState(), lastShotAt };
+        }
+        framesAnalyzed += 1;
+        samplesCompleted += 1;
+        options.onProgress?.(samplesCompleted, frameTimes.length);
+        if (framesAnalyzed % 3 === 0) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        }
+        continue;
+      }
 
       const hoopCandidates = selectHoopZoneCandidates(
         detectionFrame.candidates,
@@ -334,6 +370,7 @@ export async function analyzeBasketballVideo(
         rimTrackingLostFrames: rimTrack.lostFrames,
         averageRimTrackingConfidence:
           rimTrack.confidenceTotal / Math.max(1, rimTrack.framesProcessed),
+        rimGlobalReacquisitions: rimTrack.globalReacquisitions,
         ballCandidateFrames,
         ballTrackedFrames,
       },

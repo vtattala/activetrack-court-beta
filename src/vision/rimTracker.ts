@@ -1,8 +1,9 @@
 import type { RimCalibration } from "../../types/tracking";
 
-const TEMPLATE_COLUMNS = 13;
-const TEMPLATE_ROWS = 9;
-const MIN_MATCH_CONFIDENCE = 0.56;
+const TEMPLATE_COLUMNS = 15;
+const TEMPLATE_ROWS = 11;
+const MIN_LOCAL_MATCH_CONFIDENCE = 0.63;
+const MIN_GLOBAL_MATCH_CONFIDENCE = 0.62;
 
 export interface RimAppearanceTemplate {
   columns: number;
@@ -20,13 +21,26 @@ export interface RimTrackState {
   lostFrames: number;
   confidenceTotal: number;
   consecutiveLostFrames: number;
+  velocityX: number;
+  velocityY: number;
+  globalReacquisitions: number;
 }
 
 export interface RimTrackStep {
   rim: RimCalibration;
   confidence: number;
   found: boolean;
+  reacquired: boolean;
+  displacementX: number;
+  displacementY: number;
   state: RimTrackState;
+}
+
+interface Match {
+  centerX: number;
+  centerY: number;
+  confidence: number;
+  score: number;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -82,8 +96,14 @@ function samplePatch(
       const verticalEdge = Math.abs(
         (gray[index + frameWidth] ?? 0) - (gray[index - frameWidth] ?? 0),
       );
+      const diagonalEdge = Math.abs(
+        (gray[index + frameWidth + 1] ?? 0) - (gray[index - frameWidth - 1] ?? 0),
+      );
       const intensity = gray[index] ?? 0;
-      samples[target] = intensity * 0.36 + (horizontalEdge + verticalEdge) * 0.64;
+      samples[target] = intensity * 0.28 +
+        horizontalEdge * 0.28 +
+        verticalEdge * 0.3 +
+        diagonalEdge * 0.14;
       target += 1;
     }
   }
@@ -105,6 +125,94 @@ function correlation(left: Float32Array, right: Float32Array): number {
   return denominator > 0.0001 ? clamp(dot / denominator, -1, 1) : -1;
 }
 
+function evaluateMatch(
+  gray: Uint8Array,
+  frameWidth: number,
+  frameHeight: number,
+  template: RimAppearanceTemplate,
+  centerX: number,
+  centerY: number,
+  referenceX: number,
+  referenceY: number,
+  radiusX: number,
+  radiusY: number,
+  distancePenalty: number,
+): Match {
+  const samples = normalizeSamples(
+    samplePatch(
+      gray,
+      frameWidth,
+      frameHeight,
+      centerX,
+      centerY,
+      template.patchWidth,
+      template.patchHeight,
+      template.columns,
+      template.rows,
+    ),
+  );
+  const match = correlation(template.normalizedSamples, samples);
+  const confidence = clamp((match + 1) / 2, 0, 1);
+  const normalizedDistance = Math.hypot(
+    (centerX - referenceX) / Math.max(1, radiusX),
+    (centerY - referenceY) / Math.max(1, radiusY),
+  );
+  return {
+    centerX,
+    centerY,
+    confidence,
+    score: confidence - normalizedDistance * distancePenalty,
+  };
+}
+
+function searchGrid(
+  gray: Uint8Array,
+  frameWidth: number,
+  frameHeight: number,
+  template: RimAppearanceTemplate,
+  minimumX: number,
+  maximumX: number,
+  minimumY: number,
+  maximumY: number,
+  stride: number,
+  referenceX: number,
+  referenceY: number,
+  radiusX: number,
+  radiusY: number,
+  distancePenalty: number,
+): Match {
+  let best: Match = {
+    centerX: referenceX,
+    centerY: referenceY,
+    confidence: 0,
+    score: -1,
+  };
+  const left = Math.max(1, minimumX);
+  const right = Math.min(frameWidth - 2, maximumX);
+  const top = Math.max(1, minimumY);
+  const bottom = Math.min(frameHeight - 2, maximumY);
+
+  for (let centerY = top; centerY <= bottom; centerY += stride) {
+    for (let centerX = left; centerX <= right; centerX += stride) {
+      const candidate = evaluateMatch(
+        gray,
+        frameWidth,
+        frameHeight,
+        template,
+        centerX,
+        centerY,
+        referenceX,
+        referenceY,
+        radiusX,
+        radiusY,
+        distancePenalty,
+      );
+      if (candidate.score > best.score) best = candidate;
+    }
+  }
+  return best;
+}
+
 export function createRimTrackState(
   gray: Uint8Array,
   frameWidth: number,
@@ -113,12 +221,12 @@ export function createRimTrackState(
 ): RimTrackState {
   const rimWidthPixels = Math.max(3, rim.width * frameWidth);
   const rimHeightPixels = Math.max(2, rim.height * frameHeight);
-  const patchWidth = Math.round(clamp(rimWidthPixels * 1.9, 24, frameWidth * 0.48));
+  const patchWidth = Math.round(clamp(rimWidthPixels * 3.2, 36, frameWidth * 0.58));
   const patchHeight = Math.round(
     clamp(
-      Math.max(rimHeightPixels * 4.2, rimWidthPixels * 0.9),
-      18,
-      frameHeight * 0.34,
+      Math.max(rimHeightPixels * 6, rimWidthPixels * 2.45),
+      30,
+      frameHeight * 0.45,
     ),
   );
   const centerX = (rim.x + rim.width / 2) * frameWidth;
@@ -149,6 +257,9 @@ export function createRimTrackState(
     lostFrames: 0,
     confidenceTotal: 0,
     consecutiveLostFrames: 0,
+    velocityX: 0,
+    velocityY: 0,
+    globalReacquisitions: 0,
   };
 }
 
@@ -158,57 +269,81 @@ export function stepRimTracker(
   frameHeight: number,
   current: RimTrackState,
 ): RimTrackStep {
-  const baseCenterX = (current.rim.x + current.rim.width / 2) * frameWidth;
-  const baseCenterY = (current.rim.y + current.rim.height / 2) * frameHeight;
+  const currentCenterX = (current.rim.x + current.rim.width / 2) * frameWidth;
+  const currentCenterY = (current.rim.y + current.rim.height / 2) * frameHeight;
+  const predictedCenterX = currentCenterX + current.velocityX * frameWidth;
+  const predictedCenterY = currentCenterY + current.velocityY * frameHeight;
   const rimWidthPixels = Math.max(3, current.rim.width * frameWidth);
-  const expansion = 1 + Math.min(4, current.consecutiveLostFrames) * 0.45;
-  const radiusX = Math.round(clamp(rimWidthPixels * 0.62 * expansion, 6, frameWidth * 0.12));
-  const radiusY = Math.round(clamp(rimWidthPixels * 0.48 * expansion, 5, frameHeight * 0.1));
-  const stride = Math.max(radiusX, radiusY) > 20 ? 2 : 1;
+  const radiusX = Math.round(clamp(rimWidthPixels * 1.35, 10, frameWidth * 0.16));
+  const radiusY = Math.round(clamp(rimWidthPixels * 1.1, 9, frameHeight * 0.14));
+  const localStride = Math.max(radiusX, radiusY) > 24 ? 2 : 1;
+  let best = searchGrid(
+    gray,
+    frameWidth,
+    frameHeight,
+    current.template,
+    predictedCenterX - radiusX,
+    predictedCenterX + radiusX,
+    predictedCenterY - radiusY,
+    predictedCenterY + radiusY,
+    localStride,
+    predictedCenterX,
+    predictedCenterY,
+    radiusX,
+    radiusY,
+    0.025,
+  );
 
-  let bestCenterX = baseCenterX;
-  let bestCenterY = baseCenterY;
-  let bestScore = -1;
-  let bestConfidence = 0;
-
-  for (let offsetY = -radiusY; offsetY <= radiusY; offsetY += stride) {
-    for (let offsetX = -radiusX; offsetX <= radiusX; offsetX += stride) {
-      const centerX = baseCenterX + offsetX;
-      const centerY = baseCenterY + offsetY;
-      const samples = normalizeSamples(
-        samplePatch(
-          gray,
-          frameWidth,
-          frameHeight,
-          centerX,
-          centerY,
-          current.template.patchWidth,
-          current.template.patchHeight,
-          current.template.columns,
-          current.template.rows,
-        ),
-      );
-      const match = correlation(current.template.normalizedSamples, samples);
-      const confidence = clamp((match + 1) / 2, 0, 1);
-      const distancePenalty = Math.hypot(offsetX / radiusX, offsetY / radiusY) * 0.035;
-      const score = confidence - distancePenalty;
-      if (score > bestScore) {
-        bestScore = score;
-        bestConfidence = confidence;
-        bestCenterX = centerX;
-        bestCenterY = centerY;
-      }
-    }
+  let reacquired = false;
+  if (best.confidence < MIN_LOCAL_MATCH_CONFIDENCE) {
+    const coarseStride = Math.round(clamp(rimWidthPixels * 0.3, 3, 10));
+    const coarse = searchGrid(
+      gray,
+      frameWidth,
+      frameHeight,
+      current.template,
+      0,
+      frameWidth,
+      0,
+      frameHeight,
+      coarseStride,
+      currentCenterX,
+      currentCenterY,
+      frameWidth,
+      frameHeight,
+      0,
+    );
+    const refineRadius = coarseStride * 2.5;
+    const refined = searchGrid(
+      gray,
+      frameWidth,
+      frameHeight,
+      current.template,
+      coarse.centerX - refineRadius,
+      coarse.centerX + refineRadius,
+      coarse.centerY - refineRadius,
+      coarse.centerY + refineRadius,
+      1,
+      coarse.centerX,
+      coarse.centerY,
+      refineRadius,
+      refineRadius,
+      0.008,
+    );
+    if (refined.confidence > best.confidence) best = refined;
+    reacquired = best.confidence >= MIN_GLOBAL_MATCH_CONFIDENCE;
   }
 
-  const found = bestConfidence >= MIN_MATCH_CONFIDENCE;
-  const smoothing = bestConfidence >= 0.78 ? 0.78 : 0.52;
+  const found = reacquired || best.confidence >= MIN_LOCAL_MATCH_CONFIDENCE;
+  const smoothing = reacquired ? 1 : best.confidence >= 0.78 ? 0.93 : 0.78;
   const resolvedCenterX = found
-    ? baseCenterX + (bestCenterX - baseCenterX) * smoothing
-    : baseCenterX;
+    ? currentCenterX + (best.centerX - currentCenterX) * smoothing
+    : currentCenterX;
   const resolvedCenterY = found
-    ? baseCenterY + (bestCenterY - baseCenterY) * smoothing
-    : baseCenterY;
+    ? currentCenterY + (best.centerY - currentCenterY) * smoothing
+    : currentCenterY;
+  const displacementX = found ? (resolvedCenterX - currentCenterX) / frameWidth : 0;
+  const displacementY = found ? (resolvedCenterY - currentCenterY) / frameHeight : 0;
   const rim = found
     ? {
         ...current.rim,
@@ -216,15 +351,31 @@ export function stepRimTracker(
         y: clamp(resolvedCenterY / frameHeight - current.rim.height / 2, 0, 1 - current.rim.height),
       }
     : current.rim;
+  const velocityBlend = reacquired ? 0.25 : 0.62;
   const state: RimTrackState = {
     ...current,
     rim,
     framesProcessed: current.framesProcessed + 1,
     trackedFrames: current.trackedFrames + (found ? 1 : 0),
     lostFrames: current.lostFrames + (found ? 0 : 1),
-    confidenceTotal: current.confidenceTotal + bestConfidence,
+    confidenceTotal: current.confidenceTotal + best.confidence,
     consecutiveLostFrames: found ? 0 : current.consecutiveLostFrames + 1,
+    velocityX: found
+      ? current.velocityX * (1 - velocityBlend) + displacementX * velocityBlend
+      : current.velocityX * 0.45,
+    velocityY: found
+      ? current.velocityY * (1 - velocityBlend) + displacementY * velocityBlend
+      : current.velocityY * 0.45,
+    globalReacquisitions: current.globalReacquisitions + (reacquired ? 1 : 0),
   };
 
-  return { rim, confidence: bestConfidence, found, state };
+  return {
+    rim,
+    confidence: best.confidence,
+    found,
+    reacquired,
+    displacementX,
+    displacementY,
+    state,
+  };
 }

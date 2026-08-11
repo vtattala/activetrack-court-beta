@@ -45,3 +45,12 @@ test("keeps the last hoop position instead of jumping on a bad match", () => {
   assert.equal(result.found, false);
   assert.deepEqual(result.rim, rim);
 });
+
+test("reacquires the highlighted hoop across the full frame after a camera pan", () => {
+  const state = createRimTrackState(hoopFrame(0, 0), width, height, rim);
+  const result = stepRimTracker(hoopFrame(-40, 8), width, height, state);
+  assert.equal(result.found, true);
+  assert.equal(result.reacquired, true);
+  assert.ok(Math.abs(result.rim.x - (rim.x - 40 / width)) < 0.04);
+  assert.ok(Math.abs(result.rim.y - (rim.y + 8 / height)) < 0.045);
+});
