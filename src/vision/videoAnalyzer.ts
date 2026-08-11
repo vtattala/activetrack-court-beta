@@ -24,6 +24,7 @@ import type {
 import {
   detectOrangeBallCandidates,
 } from "./ballDetector";
+import { selectHoopZoneCandidates } from "./hoopZone";
 import { createVisionTrackState, selectTrackedBall } from "./ballTracker";
 import {
   applyVideoQualityGate,
@@ -291,8 +292,14 @@ export async function analyzeBasketballVideo(
               source.rows,
               timestamp,
             );
-            if (candidates.length > 0) ballCandidateFrames += 1;
-            const selection = selectTrackedBall(candidates, visionTrack, rim, timestamp);
+            const hoopCandidates = selectHoopZoneCandidates(
+              candidates,
+              rim,
+              source.cols,
+              source.rows,
+            );
+            if (hoopCandidates.length > 0) ballCandidateFrames += 1;
+            const selection = selectTrackedBall(hoopCandidates, visionTrack, rim, timestamp);
             visionTrack = selection.state;
             if (selection.detection) ballTrackedFrames += 1;
 
@@ -309,6 +316,12 @@ export async function analyzeBasketballVideo(
                 confidence: step.confidence,
                 reason: step.reason,
               });
+            }
+            if (step.shot || step.reason === "cooldown") {
+              visionTrack = createVisionTrackState();
+            } else if (!visionTrack.current && !tracker.armed && tracker.previous) {
+              const lastShotAt = tracker.lastShotAt;
+              tracker = { ...createTrackerEngineState(), lastShotAt };
             }
           } finally {
             source?.release();

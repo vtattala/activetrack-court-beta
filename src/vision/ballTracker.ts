@@ -119,6 +119,11 @@ export function selectTrackedBall(
         (candidate.y - rimPlaneY) / Math.max(0.001, rim.width),
       );
       if (distanceInRimWidths > 9.5) continue;
+      const motionConfidence = candidate.motionConfidence ?? 0;
+      const highAppearanceNearRim =
+        (candidate.appearanceConfidence ?? candidate.confidence) >= 0.82 &&
+        distanceInRimWidths <= 2.4;
+      if (motionConfidence < 0.36 && !highAppearanceNearRim) continue;
       const expectedWidth = rim.width * 0.5;
       const sizeScore = 1 - clamp(
         Math.abs(candidate.width - expectedWidth) / Math.max(0.001, expectedWidth * 1.45),
@@ -128,7 +133,7 @@ export function selectTrackedBall(
       const proximity = 1 - clamp(distanceInRimWidths / 9.5, 0, 1);
       score =
         candidate.confidence * 0.5 +
-        (candidate.motionConfidence ?? 0.25) * 0.25 +
+        motionConfidence * 0.25 +
         sizeScore * 0.15 +
         proximity * 0.1;
     }

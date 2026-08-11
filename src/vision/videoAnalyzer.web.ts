@@ -10,6 +10,7 @@ import type {
 } from "../../types/tracking";
 import { createVisionTrackState, selectTrackedBall } from "./ballTracker";
 import { detectBasketballCandidates } from "./pixelBallDetector";
+import { selectHoopZoneCandidates } from "./hoopZone";
 import { createRimTrackState, stepRimTracker } from "./rimTracker";
 import {
   applyVideoQualityGate,
@@ -23,8 +24,8 @@ import {
 } from "./videoAnalysisPolicy";
 
 export { IMPORT_ANALYSIS_FPS, MAX_IMPORT_DURATION_SECONDS };
-const ANALYSIS_MAX_WIDTH = 540;
-const ANALYSIS_MAX_HEIGHT = 540;
+const ANALYSIS_MAX_WIDTH = 640;
+const ANALYSIS_MAX_HEIGHT = 640;
 
 export interface VideoPreview {
   uri: string;
@@ -278,9 +279,15 @@ export async function analyzeBasketballVideo(
       stability = stepVideoStability(stability, changedPixelRatio);
       previousGray = detectionFrame.gray;
 
-      if (detectionFrame.candidates.length > 0) ballCandidateFrames += 1;
-      const selection = selectTrackedBall(
+      const hoopCandidates = selectHoopZoneCandidates(
         detectionFrame.candidates,
+        rimStep.rim,
+        canvas.width,
+        canvas.height,
+      );
+      if (hoopCandidates.length > 0) ballCandidateFrames += 1;
+      const selection = selectTrackedBall(
+        hoopCandidates,
         visionTrack,
         rimStep.rim,
         timestamp,
@@ -301,6 +308,12 @@ export async function analyzeBasketballVideo(
           confidence: step.confidence,
           reason: step.reason,
         });
+      }
+      if (step.shot || step.reason === "cooldown") {
+        visionTrack = createVisionTrackState();
+      } else if (!visionTrack.current && !tracker.armed && tracker.previous) {
+        const lastShotAt = tracker.lastShotAt;
+        tracker = { ...createTrackerEngineState(), lastShotAt };
       }
 
       framesAnalyzed += 1;

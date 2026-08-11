@@ -4,7 +4,7 @@ import type {
   VideoShotDecision,
 } from "../../types/tracking";
 
-export const IMPORT_ANALYSIS_FPS = 15;
+export const IMPORT_ANALYSIS_FPS = 30;
 export const MAX_IMPORT_DURATION_SECONDS = 300;
 const DUPLICATE_TIMESTAMP_TOLERANCE_MS = 2;
 const MAX_RELIABLE_FRAME_GAP_MS = 350;

@@ -58,7 +58,11 @@ test("clears a stale track after the ball has been missing", () => {
 
 test("penalizes a wide static candidate centered on the marked rim", () => {
   const rimArtifact = candidate(0.74, 0.23, 0, 0.94, 0.13);
-  const ball = candidate(0.48, 0.48, 0, 0.78, 0.05);
+  const ball = {
+    ...candidate(0.48, 0.48, 0, 0.78, 0.05),
+    motionConfidence: 0.9,
+    appearanceConfidence: 0.78,
+  };
   const result = selectTrackedBall([rimArtifact, ball], createVisionTrackState(), rim, 0);
   assert.equal(result.detection?.x, ball.x);
 });

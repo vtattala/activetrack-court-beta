@@ -100,7 +100,7 @@ export function detectOrangeBallCandidates(
         height: rect.height / height,
         confidence,
         appearanceConfidence: confidence,
-        motionConfidence: 0.35,
+        motionConfidence: 0.5,
         at,
       });
     }

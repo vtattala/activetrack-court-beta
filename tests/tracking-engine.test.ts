@@ -146,3 +146,20 @@ test("suppresses duplicate shot events during the cooldown", () => {
   const duplicate = step(state, ball(0.5, 0.31, 1_000), 1_000);
   assert.equal(duplicate.shot, null);
 });
+
+test("counts a later make as a separate shot after cooldown", () => {
+  let state = createTrackerEngineState();
+  state = step(state, ball(0.5, 0.42, 0), 0).state;
+  state = step(state, ball(0.5, 0.17, 100), 100).state;
+  state = step(state, ball(0.5, 0.12, 200), 200).state;
+  state = step(state, ball(0.5, 0.25, 450), 450).state;
+  const first = step(state, ball(0.5, 0.31, 500), 500);
+  assert.equal(first.shot, "make");
+
+  state = step(first.state, ball(0.5, 0.42, 1_500), 1_500).state;
+  state = step(state, ball(0.5, 0.17, 1_600), 1_600).state;
+  state = step(state, ball(0.5, 0.12, 1_700), 1_700).state;
+  state = step(state, ball(0.5, 0.25, 1_750), 1_750).state;
+  const second = step(state, ball(0.5, 0.31, 1_800), 1_800);
+  assert.equal(second.shot, "make");
+});

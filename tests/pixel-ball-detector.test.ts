@@ -4,6 +4,7 @@ import test from "node:test";
 import { detectBasketballCandidates } from "../src/vision/pixelBallDetector";
 import { createVisionTrackState, selectTrackedBall } from "../src/vision/ballTracker";
 import { createTrackerEngineState, stepTracker } from "../src/tracking/engine";
+import { selectHoopZoneCandidates } from "../src/vision/hoopZone";
 import type { RimCalibration } from "../types/tracking";
 
 const width = 120;
@@ -78,7 +79,8 @@ test("turns small-ball pixels into a verified hoop entry and net exit", () => {
       rim,
     );
     previousGray = detection.gray;
-    const selection = selectTrackedBall(detection.candidates, vision, rim, timestamp);
+    const hoopCandidates = selectHoopZoneCandidates(detection.candidates, rim, width, height);
+    const selection = selectTrackedBall(hoopCandidates, vision, rim, timestamp);
     vision = selection.state;
     const step = stepTracker(tracker, selection.detection, rim, timestamp);
     tracker = step.state;
@@ -86,4 +88,51 @@ test("turns small-ball pixels into a verified hoop entry and net exit", () => {
   });
 
   assert.equal(shot, "make");
+});
+
+test("resets after a make and counts the next made shot in the same video", () => {
+  const shotPath = [
+    [60, 110],
+    [68, 85],
+    [76, 60],
+    [84, 38],
+    [89, 22],
+    [90, 27],
+    [91, 34],
+    [92, 42],
+  ] as const;
+  let previousGray: Uint8Array | null = null;
+  let vision = createVisionTrackState();
+  let tracker = createTrackerEngineState();
+  let makes = 0;
+
+  const processFrame = (x: number | null, y: number | null, timestamp: number) => {
+    const detection = detectBasketballCandidates(
+      { width, height, data: frameWithBall(x, y) },
+      previousGray,
+      timestamp,
+      rim,
+    );
+    previousGray = detection.gray;
+    const hoopCandidates = selectHoopZoneCandidates(detection.candidates, rim, width, height);
+    const selection = selectTrackedBall(hoopCandidates, vision, rim, timestamp);
+    vision = selection.state;
+    const result = stepTracker(tracker, selection.detection, rim, timestamp);
+    tracker = result.state;
+    if (result.shot === "make") makes += 1;
+    if (result.shot || result.reason === "cooldown") {
+      vision = createVisionTrackState();
+    } else if (!vision.current && !tracker.armed && tracker.previous) {
+      const lastShotAt = tracker.lastShotAt;
+      tracker = { ...createTrackerEngineState(), lastShotAt };
+    }
+  };
+
+  shotPath.forEach(([x, y], index) => processFrame(x, y, index * 33));
+  for (let index = 0; index < 25; index += 1) {
+    processFrame(null, null, 264 + index * 33);
+  }
+  shotPath.forEach(([x, y], index) => processFrame(x, y, 1_200 + index * 33));
+
+  assert.equal(makes, 2);
 });

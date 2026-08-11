@@ -6,7 +6,7 @@ import type {
   TrackerStep,
 } from "../../types/tracking";
 
-export const SHOT_COOLDOWN_MS = 1_650;
+export const SHOT_COOLDOWN_MS = 900;
 export const LOST_BALL_MISS_MS = 900;
 export const MAX_SHOT_FLIGHT_MS = 3_400;
 export const MIN_AUTOMATIC_DECISION_CONFIDENCE = 0.86;
@@ -43,6 +43,8 @@ function clearShotState(state: TrackerEngineState): TrackerEngineState {
     entryAt: 0,
     entryX: 0,
     entryConfidence: 0,
+    lastDetectedAt: 0,
+    previous: null,
     trajectory: [],
     ascendingFrames: 0,
     descendingFrames: 0,
