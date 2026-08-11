@@ -245,6 +245,21 @@ export default function CourtScreen() {
             <Text style={styles.heroBody}>
               Set your phone courtside. ActiveTrack follows the ball and calls every make and miss while you shoot.
             </Text>
+            {!sessionActive ? (
+              <Link href="/analyze-video" asChild>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Upload and analyze a recorded basketball video"
+                  style={({ pressed }) => [styles.uploadCallout, pressed && styles.pressed]}
+                >
+                  <View style={styles.uploadCalloutCopy}>
+                    <Text style={styles.uploadCalloutEyebrow}>RECORDED A SESSION?</Text>
+                    <Text style={styles.uploadCalloutTitle}>UPLOAD &amp; ANALYZE VIDEO</Text>
+                  </View>
+                  <Text style={styles.uploadCalloutArrow}>→</Text>
+                </Pressable>
+              </Link>
+            ) : null}
           </View>
           <SessionStats
             makes={makes}
@@ -425,6 +440,45 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     maxWidth: 520,
     marginTop: 14,
+  },
+  uploadCallout: {
+    width: "100%",
+    maxWidth: 520,
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.orange,
+    borderWidth: 1,
+    borderColor: colors.orange,
+    marginTop: 18,
+    paddingHorizontal: 17,
+    paddingVertical: 11,
+  },
+  uploadCalloutCopy: {
+    flex: 1,
+  },
+  uploadCalloutEyebrow: {
+    color: "rgba(255,255,255,0.78)",
+    fontFamily: monoFont,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  uploadCalloutTitle: {
+    color: colors.white,
+    fontFamily: monoFont,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    marginTop: 3,
+  },
+  uploadCalloutArrow: {
+    color: colors.white,
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "400",
+    marginLeft: 14,
   },
   workspace: {
     flexDirection: "row",
