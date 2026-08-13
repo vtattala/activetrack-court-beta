@@ -1,6 +1,7 @@
 const MODEL_URL = "/models/ebard-basketball-yolov8n.onnx";
-const RUNTIME_URL = "/ort/ort.all.min.js";
-const WASM_PATH = "/ort-wasm/";
+const ORT_CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
+const RUNTIME_URL = `${ORT_CDN}ort.all.min.js`;
+const WASM_PATH = ORT_CDN;
 const LABELS = ["basketball", "hoop", "player", "referee"] as const;
 const MODEL_SIZE = 704;
 const CLASS_CONFIDENCE: Record<LearnedBasketballLabel, number> = {

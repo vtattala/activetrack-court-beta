@@ -24,3 +24,4 @@ The model detects basketballs, hoops, players, and referees. See the model card 
 - Source: https://github.com/microsoft/onnxruntime
 - Version: 1.27.0
 - License: MIT
+- Distribution: pinned jsDelivr package assets are loaded at runtime
