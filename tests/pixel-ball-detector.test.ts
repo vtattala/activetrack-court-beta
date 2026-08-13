@@ -132,7 +132,7 @@ test("resets after a make and counts the next made shot in the same video", () =
   for (let index = 0; index < 25; index += 1) {
     processFrame(null, null, 264 + index * 33);
   }
-  shotPath.forEach(([x, y], index) => processFrame(x, y, 1_200 + index * 33));
+  shotPath.forEach(([x, y], index) => processFrame(x, y, 2_500 + index * 33));
 
   assert.equal(makes, 2);
 });

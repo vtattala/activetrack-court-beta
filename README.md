@@ -2,7 +2,7 @@
 
 ActiveTrack is an Expo SDK 57 basketball camera app that counts makes and misses in real time. Camera frames stay on the device and are processed by VisionCamera 5, Skia, GPU resizing, worklets, and Fast OpenCV. The live view tracks the ball's predicted trajectory and the dominant moving player independently, so player appearance is never used as a basketball signal.
 
-The recorded-video route accepts a device-library video up to five minutes long, lets the user choose a clear calibration frame and mark the rim, then runs the ball-candidate, trajectory, confidence, and shot-decision pipeline over decoded frames at 30 FPS. The analyzer follows the selected hoop with motion prediction, performs a full-frame reacquisition after larger camera pans, and rebases the ball trajectory when the camera moves. Scoring pauses while hoop lock is uncertain instead of guessing. Makes require a tracked ball to enter above the rim plane and exit below it; adjacent downward crossings are misses, and every result can be replayed and corrected.
+The recorded-video route accepts a device-library video up to five minutes long, lets the user choose a clear calibration frame and mark the rim, then runs a basketball-trained YOLO detector over decoded frames at 30 FPS. ByteTrack associates hoop, ball, and player detections across frames; the manual rim calibration remains authoritative for a fixed camera and anchors to a learned hoop track only after a sustained lock. The existing motion detector fills short ball-detection gaps. Scoring pauses while video quality is uncertain instead of guessing. Makes require a tracked ball to enter above the rim plane and exit below it; adjacent downward crossings are misses, and every result can be replayed and corrected.
 
 For best tracking, record in landscape 10-20 feet from the hoop, keep the rim and ball visible, avoid hard cuts or extreme zoom changes, and use even court lighting. No vision system can promise zero mistakes on arbitrary footage; this is a beta and its thresholds still need validation against a larger labeled-video set.
 
@@ -25,3 +25,7 @@ The real-time camera pipeline uses native frame processors and requires an Expo 
 - `npm run doctor`
 
 Before App Store submission, replace the placeholder bundle identifier in `app.json` and connect the project to the correct Apple Developer account with EAS.
+
+## Model and tracking credits
+
+The browser analyzer uses the CC BY 4.0 E-BARD basketball detector, the MIT-licensed `byte-track-ts` tracker, and ONNX Runtime Web. Full attribution and exact revisions are in `THIRD_PARTY_NOTICES.md`.

@@ -6,7 +6,7 @@ import type {
   TrackerStep,
 } from "../../types/tracking";
 
-export const SHOT_COOLDOWN_MS = 900;
+export const SHOT_COOLDOWN_MS = 1_800;
 export const LOST_BALL_MISS_MS = 900;
 export const MAX_SHOT_FLIGHT_MS = 3_400;
 export const MIN_AUTOMATIC_DECISION_CONFIDENCE = 0.86;
@@ -182,7 +182,9 @@ export function stepTracker(
 
   const risingShot =
     inBroadApproach &&
-    detection.y < rimPlaneY + Math.max(0.28, rim.width * 4.5) &&
+    // Arm only once the rising ball reaches the hoop approach. A dribble or
+    // low rebound below the basket must not start a second shot trajectory.
+    detection.y < rimPlaneY + Math.min(0.3, Math.max(0.24, rim.width * 4.5)) &&
     movingUp &&
     next.ascendingFrames >= 2;
   const localDescendingShot =

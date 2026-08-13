@@ -5,6 +5,7 @@ import {
   applyVideoQualityGate,
   buildVideoAnalysisDiagnostics,
   buildVideoFrameTimes,
+  consolidateVideoShotDecisions,
   createVideoStabilityState,
   IMPORT_ANALYSIS_FPS,
   resolveVideoSampleTiming,
@@ -31,11 +32,17 @@ test("uses actual decoded frame time and rejects duplicate frames", () => {
 
 test("accepts a tight wide rim box and rejects implausible calibration", () => {
   assert.equal(
-    validateVideoRimCalibration({ x: 0.65, y: 0.2, width: 0.18, height: 0.055 }),
+    validateVideoRimCalibration(
+      { x: 0.65, y: 0.2, width: 0.18, height: 0.055 },
+      16 / 9,
+    ),
     null,
   );
   assert.match(
-    validateVideoRimCalibration({ x: 0.65, y: 0.2, width: 0.09, height: 0.1 }) ?? "",
+    validateVideoRimCalibration(
+      { x: 0.65, y: 0.2, width: 0.06, height: 0.1 },
+      16 / 9,
+    ) ?? "",
     /wider/,
   );
   assert.match(
@@ -56,6 +63,26 @@ test("forces manual review when decoded timing is unreliable", () => {
     reason: "rim-crossing",
   };
   assert.equal(applyVideoQualityGate([decision], diagnostics)[0]?.finalKind, null);
+});
+
+test("collapses a tentative event followed by a confident result for the same attempt", () => {
+  const tentative: VideoShotDecision = {
+    id: "tentative",
+    atSeconds: 4.1,
+    suggestedKind: "make",
+    finalKind: null,
+    confidence: 0.81,
+    reason: "rim-entry-lost",
+  };
+  const confirmed: VideoShotDecision = {
+    id: "confirmed",
+    atSeconds: 6.2,
+    suggestedKind: "miss",
+    finalKind: "miss",
+    confidence: 0.96,
+    reason: "airball",
+  };
+  assert.deepEqual(consolidateVideoShotDecisions([tentative, confirmed]), [confirmed]);
 });
 
 test("keeps automatic decisions when unique frame timing is continuous", () => {

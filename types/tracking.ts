@@ -105,6 +105,11 @@ export interface VideoAnalysisDiagnostics {
   rimGlobalReacquisitions: number;
   ballCandidateFrames: number;
   ballTrackedFrames: number;
+  learnedBallDetectionFrames: number;
+  learnedHoopDetectionFrames: number;
+  learnedPlayerDetectionFrames: number;
+  playerTrackedFrames: number;
+  learnedDetectorBackend: "webgpu" | "wasm" | "native";
   requiresFullReview: boolean;
   warnings: string[];
 }

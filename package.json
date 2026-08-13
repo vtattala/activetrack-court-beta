@@ -19,6 +19,7 @@
     "@expo/metro-runtime": "~57.0.9",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/react-native-skia": "2.6.2",
+    "byte-track-ts": "github:billmyplate/byte-track-ts#ac2439c47175307d559daf423c8a8a425abb67bb",
     "expo": "~57.0.12",
     "expo-constants": "~57.0.9",
     "expo-dev-client": "~57.0.11",

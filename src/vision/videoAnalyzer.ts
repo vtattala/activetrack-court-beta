@@ -366,6 +366,11 @@ export async function analyzeBasketballVideo(
         rimGlobalReacquisitions: 0,
         ballCandidateFrames,
         ballTrackedFrames,
+        learnedBallDetectionFrames: 0,
+        learnedHoopDetectionFrames: 0,
+        learnedPlayerDetectionFrames: 0,
+        playerTrackedFrames: 0,
+        learnedDetectorBackend: "native",
       },
     );
     return {

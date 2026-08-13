@@ -379,3 +379,52 @@ export function stepRimTracker(
     state,
   };
 }
+
+/**
+ * Lets a learned hoop detector provide the authoritative rim location while
+ * preserving the same motion and diagnostics state used by template fallback.
+ */
+export function stepRimTrackerFromDetection(
+  current: RimTrackState,
+  detectedRim: RimCalibration,
+  confidence: number,
+): RimTrackStep {
+  const currentCenterX = current.rim.x + current.rim.width / 2;
+  const currentCenterY = current.rim.y + current.rim.height / 2;
+  const detectedCenterX = detectedRim.x + detectedRim.width / 2;
+  const detectedCenterY = detectedRim.y + detectedRim.height / 2;
+  const displacementX = detectedCenterX - currentCenterX;
+  const displacementY = detectedCenterY - currentCenterY;
+  const resolvedConfidence = clamp(confidence, 0, 1);
+  const state: RimTrackState = {
+    ...current,
+    rim: { ...detectedRim },
+    framesProcessed: current.framesProcessed + 1,
+    trackedFrames: current.trackedFrames + 1,
+    confidenceTotal: current.confidenceTotal + resolvedConfidence,
+    consecutiveLostFrames: 0,
+    velocityX: current.velocityX * 0.3 + displacementX * 0.7,
+    velocityY: current.velocityY * 0.3 + displacementY * 0.7,
+    globalReacquisitions:
+      current.globalReacquisitions + (current.consecutiveLostFrames > 0 ? 1 : 0),
+  };
+  return {
+    rim: state.rim,
+    confidence: resolvedConfidence,
+    found: true,
+    reacquired: current.consecutiveLostFrames > 0,
+    displacementX,
+    displacementY,
+    state,
+  };
+}
+
+/**
+ * Imported-video analysis is calibrated for a fixed camera. When neither the
+ * learned detector nor appearance template has a trustworthy match, retain
+ * the user's exact rim instead of discarding otherwise valid ball detections.
+ * Camera-motion diagnostics still force those videos to manual review.
+ */
+export function stepFixedRimTracker(current: RimTrackState): RimTrackStep {
+  return stepRimTrackerFromDetection(current, current.rim, 0.84);
+}

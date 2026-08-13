@@ -1,3 +1,4 @@
+import { Tracker as ByteTracker } from "byte-track-ts";
 import {
   createTrackerEngineState,
   MIN_AUTOMATIC_DECISION_CONFIDENCE,
@@ -11,7 +12,26 @@ import type {
 import { createVisionTrackState, selectTrackedBall } from "./ballTracker";
 import { detectBasketballCandidates } from "./pixelBallDetector";
 import { selectHoopZoneCandidates } from "./hoopZone";
-import { createRimTrackState, stepRimTracker } from "./rimTracker";
+import { loadLearnedBasketballDetector } from "./learnedBasketballDetector.web";
+import {
+  chooseBoxNearReference,
+  chooseCalibrationHoop,
+  createHoopRimAnchor,
+  learnedDetectionToPixelBox,
+  mergeLearnedAndMotionCandidates,
+  pixelBoxToBallDetection,
+  rimFromTrackedHoop,
+  toByteTrackDetections,
+  trackRowToPixelBox,
+  type HoopRimAnchor,
+  type PixelBox,
+} from "./learnedTracking";
+import {
+  createRimTrackState,
+  stepFixedRimTracker,
+  stepRimTracker,
+  stepRimTrackerFromDetection,
+} from "./rimTracker";
 import {
   alignTrackerEngineToRimShift,
   alignVisionTrackToRimShift,
@@ -20,6 +40,7 @@ import {
   applyVideoQualityGate,
   buildVideoAnalysisDiagnostics,
   buildVideoFrameTimes,
+  consolidateVideoShotDecisions,
   createVideoStabilityState,
   IMPORT_ANALYSIS_FPS,
   MAX_IMPORT_DURATION_SECONDS,
@@ -30,6 +51,30 @@ import {
 export { IMPORT_ANALYSIS_FPS, MAX_IMPORT_DURATION_SECONDS };
 const ANALYSIS_MAX_WIDTH = 640;
 const ANALYSIS_MAX_HEIGHT = 640;
+const HOOP_TRACKER_SETTINGS = {
+  track_high_thresh: 0.08,
+  track_low_thresh: 0.025,
+  new_track_thresh: 0.08,
+  track_buffer: 36,
+  match_thresh: 0.78,
+  fuse_score: true,
+};
+const BALL_TRACKER_SETTINGS = {
+  track_high_thresh: 0.22,
+  track_low_thresh: 0.05,
+  new_track_thresh: 0.2,
+  track_buffer: 18,
+  match_thresh: 0.82,
+  fuse_score: true,
+};
+const PLAYER_TRACKER_SETTINGS = {
+  track_high_thresh: 0.32,
+  track_low_thresh: 0.08,
+  new_track_thresh: 0.3,
+  track_buffer: 45,
+  match_thresh: 0.8,
+  fuse_score: true,
+};
 
 export interface VideoPreview {
   uri: string;
@@ -200,6 +245,14 @@ export async function analyzeBasketballVideo(
   let stability = createVideoStabilityState();
   let ballCandidateFrames = 0;
   let ballTrackedFrames = 0;
+  let learnedBallDetectionFrames = 0;
+  let learnedHoopDetectionFrames = 0;
+  let learnedPlayerDetectionFrames = 0;
+  let playerTrackedFrames = 0;
+  const learnedDetector = await loadLearnedBasketballDetector();
+  const hoopAssociation = new ByteTracker(HOOP_TRACKER_SETTINGS);
+  const ballAssociation = new ByteTracker(BALL_TRACKER_SETTINGS);
+  const playerAssociation = new ByteTracker(PLAYER_TRACKER_SETTINGS);
 
   try {
     const durationSeconds = options.durationSeconds && options.durationSeconds > 0
@@ -227,6 +280,17 @@ export async function analyzeBasketballVideo(
     await seekVideo(video, calibrationTime);
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     const calibrationPixels = context.getImageData(0, 0, canvas.width, canvas.height);
+    const calibrationLearned = await learnedDetector.detect(canvas);
+    const calibrationHoop = chooseCalibrationHoop(
+      calibrationLearned.hoops.map(learnedDetectionToPixelBox),
+      rim,
+      canvas.width,
+      canvas.height,
+    );
+    let hoopAnchor: HoopRimAnchor | null = null;
+    let lastHoopBox: PixelBox | null = calibrationHoop;
+    let preferredHoopTrackId: number | undefined;
+    let consecutiveLearnedHoopFrames = calibrationHoop ? 1 : 0;
     let rimTrack = createRimTrackState(
       frameGray(calibrationPixels),
       canvas.width,
@@ -255,6 +319,49 @@ export async function analyzeBasketballVideo(
       largestFrameGapMs = Math.max(largestFrameGapMs, timing.gapMs);
       const timestamp = timing.timestampMs;
 
+      const learnedFrame = await learnedDetector.detect(canvas);
+      if (learnedFrame.basketballs.length > 0) learnedBallDetectionFrames += 1;
+      if (learnedFrame.hoops.length > 0) learnedHoopDetectionFrames += 1;
+      const rawPlayerBoxes = learnedFrame.players.map(learnedDetectionToPixelBox);
+      if (rawPlayerBoxes.length > 0) learnedPlayerDetectionFrames += 1;
+      const trackedPlayerBoxes = playerAssociation
+        .update(toByteTrackDetections(rawPlayerBoxes))
+        .map(trackRowToPixelBox)
+        .filter((box): box is PixelBox => box !== null);
+      if (trackedPlayerBoxes.length > 0) playerTrackedFrames += 1;
+      const rawHoopBoxes = learnedFrame.hoops.map(learnedDetectionToPixelBox);
+      const trackedHoopBoxes = hoopAssociation
+        .update(toByteTrackDetections(rawHoopBoxes))
+        .map(trackRowToPixelBox)
+        .filter((box): box is PixelBox => box !== null);
+      const observedHoop = chooseCalibrationHoop(
+        rawHoopBoxes,
+        rimTrack.rim,
+        canvas.width,
+        canvas.height,
+      );
+      consecutiveLearnedHoopFrames = observedHoop
+        ? consecutiveLearnedHoopFrames + 1
+        : 0;
+      if (!hoopAnchor && observedHoop && consecutiveLearnedHoopFrames >= 3) {
+        hoopAnchor = createHoopRimAnchor(
+          rimTrack.rim,
+          observedHoop,
+          canvas.width,
+          canvas.height,
+        );
+        lastHoopBox = observedHoop;
+      }
+      const hoopReference: PixelBox | null = lastHoopBox ?? observedHoop;
+      const trackedHoop: PixelBox | null = hoopAnchor && hoopReference
+        ? chooseBoxNearReference(trackedHoopBoxes, hoopReference, preferredHoopTrackId) ??
+          chooseBoxNearReference(rawHoopBoxes, hoopReference)
+        : null;
+      if (trackedHoop) {
+        lastHoopBox = trackedHoop;
+        preferredHoopTrackId = trackedHoop.trackId ?? preferredHoopTrackId;
+      }
+
       const detectionFrame = detectBasketballCandidates(
         pixels,
         previousGray,
@@ -262,12 +369,22 @@ export async function analyzeBasketballVideo(
         rimTrack.rim,
       );
       const lostRimFramesBeforeStep = rimTrack.consecutiveLostFrames;
-      const rimStep = stepRimTracker(
-        detectionFrame.gray,
-        canvas.width,
-        canvas.height,
-        rimTrack,
-      );
+      const learnedRim = trackedHoop && hoopAnchor
+        ? rimFromTrackedHoop(trackedHoop, hoopAnchor, canvas.width, canvas.height)
+        : null;
+      const templateRimStep = learnedRim && trackedHoop
+        ? null
+        : stepRimTracker(
+          detectionFrame.gray,
+          canvas.width,
+          canvas.height,
+          rimTrack,
+        );
+      const rimStep = learnedRim && trackedHoop
+        ? stepRimTrackerFromDetection(rimTrack, learnedRim, trackedHoop.confidence)
+        : templateRimStep?.found
+          ? templateRimStep
+          : stepFixedRimTracker(rimTrack);
       rimTrack = rimStep.state;
       if (rimStep.found && lostRimFramesBeforeStep < 4) {
         visionTrack = alignVisionTrackToRimShift(
@@ -315,8 +432,26 @@ export async function analyzeBasketballVideo(
         continue;
       }
 
-      const hoopCandidates = selectHoopZoneCandidates(
+      const rawBallBoxes = learnedFrame.basketballs.map(learnedDetectionToPixelBox);
+      const trackedBallBoxes = ballAssociation
+        .update(toByteTrackDetections(rawBallBoxes))
+        .map(trackRowToPixelBox)
+        .filter((box): box is PixelBox => box !== null);
+      const learnedBallCandidates = (trackedBallBoxes.length > 0
+        ? trackedBallBoxes
+        : rawBallBoxes
+      ).map((box) => pixelBoxToBallDetection(
+        box,
+        canvas.width,
+        canvas.height,
+        timestamp,
+      ));
+      const combinedCandidates = mergeLearnedAndMotionCandidates(
+        learnedBallCandidates,
         detectionFrame.candidates,
+      );
+      const hoopCandidates = selectHoopZoneCandidates(
+        combinedCandidates,
         rimStep.rim,
         canvas.width,
         canvas.height,
@@ -373,12 +508,17 @@ export async function analyzeBasketballVideo(
         rimGlobalReacquisitions: rimTrack.globalReacquisitions,
         ballCandidateFrames,
         ballTrackedFrames,
+        learnedBallDetectionFrames,
+        learnedHoopDetectionFrames,
+        learnedPlayerDetectionFrames,
+        playerTrackedFrames,
+        learnedDetectorBackend: learnedDetector.backend,
       },
     );
     return {
       durationSeconds,
       framesAnalyzed,
-      decisions: applyVideoQualityGate(decisions, diagnostics),
+      decisions: applyVideoQualityGate(consolidateVideoShotDecisions(decisions), diagnostics),
       diagnostics,
     };
   } finally {

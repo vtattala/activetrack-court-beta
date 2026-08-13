@@ -30,6 +30,11 @@ export interface VideoTrackingQuality {
   rimGlobalReacquisitions?: number;
   ballCandidateFrames?: number;
   ballTrackedFrames?: number;
+  learnedBallDetectionFrames?: number;
+  learnedHoopDetectionFrames?: number;
+  learnedPlayerDetectionFrames?: number;
+  playerTrackedFrames?: number;
+  learnedDetectorBackend?: "webgpu" | "wasm" | "native";
 }
 
 export function createVideoStabilityState(): VideoStabilityState {
@@ -84,7 +89,10 @@ export function resolveVideoSampleTiming(
   };
 }
 
-export function validateVideoRimCalibration(rim: RimCalibration): string | null {
+export function validateVideoRimCalibration(
+  rim: RimCalibration,
+  frameAspectRatio = 1,
+): string | null {
   const values = [rim.x, rim.y, rim.width, rim.height];
   if (values.some((value) => !Number.isFinite(value))) {
     return "Draw the rim box again.";
@@ -105,7 +113,10 @@ export function validateVideoRimCalibration(rim: RimCalibration): string | null 
   if (rim.width > 0.5 || rim.height > 0.28) {
     return "The rim box is too large. Include only the hoop opening.";
   }
-  const aspectRatio = rim.width / rim.height;
+  // Rim coordinates are normalized to the frame. Convert them back to pixel
+  // proportions before judging their shape or a landscape video makes a
+  // correctly drawn wide box look artificially narrow.
+  const aspectRatio = (rim.width * Math.max(0.01, frameAspectRatio)) / rim.height;
   if (aspectRatio < 1.4) {
     return "The rim box should be wider than it is tall.";
   }
@@ -113,6 +124,34 @@ export function validateVideoRimCalibration(rim: RimCalibration): string | null 
     return "The rim box is too thin. Include the full height of the opening.";
   }
   return null;
+}
+
+export function consolidateVideoShotDecisions(
+  decisions: VideoShotDecision[],
+  maximumSameAttemptGapMs = 2_400,
+): VideoShotDecision[] {
+  const consolidated: VideoShotDecision[] = [];
+  for (const decision of decisions) {
+    const previous = consolidated.at(-1);
+    if (
+      previous &&
+      (decision.atSeconds - previous.atSeconds) * 1_000 <= maximumSameAttemptGapMs &&
+      (previous.finalKind === null || decision.finalKind === null)
+    ) {
+      // A tentative entry/lost-ball review followed by a confident exit or
+      // miss belongs to one physical attempt. Prefer the automatic decision;
+      // if both need review, preserve the stronger observation.
+      if (
+        decision.finalKind !== null ||
+        (previous.finalKind === null && decision.confidence > previous.confidence)
+      ) {
+        consolidated[consolidated.length - 1] = decision;
+      }
+      continue;
+    }
+    consolidated.push(decision);
+  }
+  return consolidated;
 }
 
 export function buildVideoAnalysisDiagnostics(
@@ -168,6 +207,11 @@ export function buildVideoAnalysisDiagnostics(
     rimGlobalReacquisitions: tracking.rimGlobalReacquisitions ?? 0,
     ballCandidateFrames: tracking.ballCandidateFrames ?? 0,
     ballTrackedFrames: tracking.ballTrackedFrames ?? 0,
+    learnedBallDetectionFrames: tracking.learnedBallDetectionFrames ?? 0,
+    learnedHoopDetectionFrames: tracking.learnedHoopDetectionFrames ?? 0,
+    learnedPlayerDetectionFrames: tracking.learnedPlayerDetectionFrames ?? 0,
+    playerTrackedFrames: tracking.playerTrackedFrames ?? 0,
+    learnedDetectorBackend: tracking.learnedDetectorBackend ?? "native",
     requiresFullReview: warnings.length > 0,
     warnings,
   };

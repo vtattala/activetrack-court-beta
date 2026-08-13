@@ -87,6 +87,16 @@ test("does not call a miss while the ball is still rising", () => {
   assert.equal(result.shot, null);
 });
 
+test("does not arm on a low dribble or rebound beneath the basket", () => {
+  let state = createTrackerEngineState();
+  state = step(state, ball(0.45, 0.78, 0), 0).state;
+  state = step(state, ball(0.47, 0.7, 100), 100).state;
+  state = step(state, ball(0.49, 0.63, 200), 200).state;
+  const result = step(state, ball(0.51, 0.69, 300), 300);
+  assert.equal(result.state.armed, false);
+  assert.equal(result.shot, null);
+});
+
 test("counts a descending shot that leaves the expanded rim lane as a miss", () => {
   let state = createTrackerEngineState();
   state = step(state, ball(0.5, 0.44, 0), 0).state;
@@ -156,10 +166,10 @@ test("counts a later make as a separate shot after cooldown", () => {
   const first = step(state, ball(0.5, 0.31, 500), 500);
   assert.equal(first.shot, "make");
 
-  state = step(first.state, ball(0.5, 0.42, 1_500), 1_500).state;
-  state = step(state, ball(0.5, 0.17, 1_600), 1_600).state;
-  state = step(state, ball(0.5, 0.12, 1_700), 1_700).state;
-  state = step(state, ball(0.5, 0.25, 1_750), 1_750).state;
-  const second = step(state, ball(0.5, 0.31, 1_800), 1_800);
+  state = step(first.state, ball(0.5, 0.42, 2_500), 2_500).state;
+  state = step(state, ball(0.5, 0.17, 2_600), 2_600).state;
+  state = step(state, ball(0.5, 0.12, 2_700), 2_700).state;
+  state = step(state, ball(0.5, 0.25, 2_750), 2_750).state;
+  const second = step(state, ball(0.5, 0.31, 2_800), 2_800);
   assert.equal(second.shot, "make");
 });

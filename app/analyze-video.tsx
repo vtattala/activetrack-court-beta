@@ -156,13 +156,18 @@ export default function AnalyzeVideoScreen() {
   }, [analyzing, preparing, preview, video]);
 
   const rimValidationError = useMemo(
-    () => rim ? validateVideoRimCalibration(rim) : null,
-    [rim],
+    () => rim && preview
+      ? validateVideoRimCalibration(rim, preview.width / Math.max(1, preview.height))
+      : null,
+    [preview, rim],
   );
 
   const analyze = useCallback(async () => {
     if (!video || !preview || !rim) return;
-    const calibrationError = validateVideoRimCalibration(rim);
+    const calibrationError = validateVideoRimCalibration(
+      rim,
+      preview.width / Math.max(1, preview.height),
+    );
     if (calibrationError) {
       setError(calibrationError);
       setCalibrating(true);
@@ -252,9 +257,9 @@ export default function AnalyzeVideoScreen() {
         </View>
 
         <Text style={styles.eyebrow}>RECORDED VIDEO ANALYSIS</Text>
-        <Text style={styles.title}>Import. Mark the rim. Analyze.</Text>
+        <Text style={styles.title}>Import. Mark the rim once. Track every shot.</Text>
         <Text style={styles.body}>
-          Use a stationary landscape recording with the complete ball flight visible. Processing stays on this device.
+          A basketball-trained detector finds the hoop, ball, and players in each sampled frame, while ByteTrack preserves their identities. Processing stays on this device.
         </Text>
 
         <View style={styles.actionsRow}>
@@ -334,7 +339,7 @@ export default function AnalyzeVideoScreen() {
             {rim ? (
               <View style={[styles.calibrationStatus, rimValidationError && styles.calibrationStatusError]}>
                 <Text style={[styles.calibrationStatusText, rimValidationError && styles.calibrationStatusTextError]}>
-                  {rimValidationError ?? "RIM LOCK READY · THE BOX WILL FOLLOW THE HOOP THROUGH EVERY FRAME"}
+                  {rimValidationError ?? "AI HOOP LOCK READY · THE DETECTOR WILL RE-FIND THIS RIM IN EVERY FRAME"}
                 </Text>
               </View>
             ) : null}
@@ -343,7 +348,7 @@ export default function AnalyzeVideoScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No video selected</Text>
             <Text style={styles.emptyBody}>
-              Select a recording up to {MAX_IMPORT_DURATION_SECONDS / 60} minutes long. The camera must remain fixed so the marked rim stays aligned.
+              Select a stationary landscape recording up to {MAX_IMPORT_DURATION_SECONDS / 60} minutes long with the rim and complete ball flight visible.
             </Text>
           </View>
         )}
@@ -351,7 +356,7 @@ export default function AnalyzeVideoScreen() {
         {analyzing ? (
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>READING BALL TRAJECTORIES</Text>
+              <Text style={styles.progressLabel}>RUNNING BASKETBALL AI + BYTETRACK</Text>
               <Text style={styles.progressValue}>{progressPercent}%</Text>
             </View>
             <View style={styles.progressTrack}>
@@ -408,12 +413,19 @@ export default function AnalyzeVideoScreen() {
                   )) * 100,
               )}% · CAMERA RELOCKS {result.diagnostics.rimGlobalReacquisitions} · BALL TRACKED IN {result.diagnostics.ballTrackedFrames} FRAMES
             </Text>
+            <Text style={styles.qualityReady}>
+              LEARNED DETECTOR {result.diagnostics.learnedDetectorBackend.toUpperCase()} · HOOP FOUND IN {result.diagnostics.learnedHoopDetectionFrames} FRAMES · BALL FOUND IN {result.diagnostics.learnedBallDetectionFrames} FRAMES
+            </Text>
+
+            <Text style={styles.qualityReady}>
+              PLAYER DETECTOR {result.diagnostics.learnedPlayerDetectionFrames} FRAMES · BYTETRACK PLAYER LOCK {result.diagnostics.playerTrackedFrames} FRAMES
+            </Text>
 
             {result.decisions.length === 0 ? (
               <View style={styles.noShots}>
                 <Text style={styles.noShotsTitle}>No complete shot trajectories found</Text>
                 <Text style={styles.noShotsBody}>
-                  No ball entered or exited the marked hoop corridor. Re-mark the inside edge of the rim on a clear frame, then analyze again.
+                  No complete entry-and-exit sequence was found. Choose a clear calibration frame, mark the inside edge of the rim, and analyze again.
                 </Text>
               </View>
             ) : (
