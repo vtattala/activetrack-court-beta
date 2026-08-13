@@ -15,11 +15,13 @@ import { selectHoopZoneCandidates } from "./hoopZone";
 import { loadLearnedBasketballDetector } from "./learnedBasketballDetector.web";
 import {
   chooseBoxNearReference,
+  chooseAutomaticHoop,
   chooseCalibrationHoop,
   createHoopRimAnchor,
   learnedDetectionToPixelBox,
   mergeLearnedAndMotionCandidates,
   pixelBoxToBallDetection,
+  rimFromAutomaticHoop,
   rimFromTrackedHoop,
   toByteTrackDetections,
   trackRowToPixelBox,
@@ -82,6 +84,10 @@ export interface VideoPreview {
   height: number;
   durationSeconds: number;
   atSeconds: number;
+  automaticRim: RimCalibration | null;
+  automaticRimConfidence: number;
+  automaticHoopCandidates: number;
+  automaticHoopAmbiguous: boolean;
 }
 
 export interface VideoAnalysisOptions {
@@ -202,6 +208,85 @@ function frameGray(pixels: ImageData): Uint8Array {
   return gray;
 }
 
+const MIN_AUTOMATIC_HOOP_CONFIDENCE = 0.18;
+
+function buildAutomaticHoopScanTimes(
+  requestedTime: number,
+  durationSeconds: number,
+): number[] {
+  const maximum = Math.max(0, durationSeconds - 0.05);
+  const offsets = [0, 0.45, -0.45, 0.9, 1.6, 2.5];
+  return Array.from(new Set(offsets.map((offset) =>
+    Math.round(Math.max(0, Math.min(maximum, requestedTime + offset)) * 1_000) / 1_000
+  )));
+}
+
+function isWarmRimPixel(red: number, green: number, blue: number): boolean {
+  const maximum = Math.max(red, green, blue);
+  const minimum = Math.min(red, green, blue);
+  return red >= 85 && red - minimum >= 34 && red >= green * 1.08 && red >= blue * 1.22 && maximum - minimum >= 38;
+}
+
+/** Refines the broad learned hoop box to the painted horizontal rim line. */
+function refineAutomaticRim(
+  fallback: RimCalibration,
+  hoop: PixelBox,
+  pixels: ImageData,
+): RimCalibration {
+  const left = Math.max(0, Math.floor(hoop.left));
+  const right = Math.min(pixels.width - 1, Math.ceil(hoop.right));
+  const top = Math.max(0, Math.floor(hoop.top));
+  const bottom = Math.min(
+    pixels.height - 1,
+    Math.ceil(hoop.top + (hoop.bottom - hoop.top) * 0.72),
+  );
+  let bestRow = -1;
+  let bestLeft = 0;
+  let bestRight = 0;
+  let bestScore = 0;
+  for (let y = top; y <= bottom; y += 1) {
+    let count = 0;
+    let rowLeft = right;
+    let rowRight = left;
+    for (let x = left; x <= right; x += 1) {
+      const offset = (y * pixels.width + x) * 4;
+      if (!isWarmRimPixel(
+        pixels.data[offset] ?? 0,
+        pixels.data[offset + 1] ?? 0,
+        pixels.data[offset + 2] ?? 0,
+      )) continue;
+      count += 1;
+      rowLeft = Math.min(rowLeft, x);
+      rowRight = Math.max(rowRight, x);
+    }
+    const span = Math.max(0, rowRight - rowLeft);
+    const score = count + span * 0.45;
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = y;
+      bestLeft = rowLeft;
+      bestRight = rowRight;
+    }
+  }
+  const hoopWidth = Math.max(1, hoop.right - hoop.left);
+  if (bestRow < 0 || bestRight - bestLeft < hoopWidth * 0.28 || bestScore < 8) {
+    return fallback;
+  }
+  const padding = Math.max(1, (bestRight - bestLeft) * 0.05);
+  const widthPixels = Math.max(pixels.width * 0.035, bestRight - bestLeft + padding * 2);
+  const heightPixels = Math.max(pixels.height * 0.012, widthPixels / 4.2);
+  const width = Math.min(0.5, widthPixels / pixels.width);
+  const height = Math.min(0.28, heightPixels / pixels.height);
+  const centerX = (bestLeft + bestRight) / 2 / pixels.width;
+  const centerY = bestRow / pixels.height;
+  return {
+    x: Math.max(0, Math.min(1 - width, centerX - width / 2)),
+    y: Math.max(0, Math.min(1 - height, centerY - height / 2)),
+    width,
+    height,
+  };
+}
+
 export async function createVideoPreview(
   uri: string,
   requestedTimeSeconds = 0.25,
@@ -212,15 +297,68 @@ export async function createVideoPreview(
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
       throw new Error("The selected video has no readable duration.");
     }
-    await seekVideo(video, requestedTimeSeconds);
     const canvas = createFrameCanvas(video, 960, 960);
-    drawVideoFrame(video, canvas);
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("This browser cannot read video frames.");
+    const detector = await loadLearnedBasketballDetector();
+    const scanTimes = buildAutomaticHoopScanTimes(requestedTimeSeconds, durationSeconds);
+    let bestPreview: {
+      uri: string;
+      atSeconds: number;
+      rim: RimCalibration;
+      confidence: number;
+      candidates: number;
+      ambiguous: boolean;
+    } | null = null;
+    let fallbackUri = "";
+    let fallbackTime = 0;
+
+    for (const scanTime of scanTimes) {
+      await seekVideo(video, scanTime);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frameUri = canvas.toDataURL("image/jpeg", 0.92);
+      if (!fallbackUri) {
+        fallbackUri = frameUri;
+        fallbackTime = video.currentTime;
+      }
+      const learned = await detector.detect(canvas);
+      const choice = chooseAutomaticHoop(
+        learned.hoops.map(learnedDetectionToPixelBox),
+        canvas.width,
+        canvas.height,
+      );
+      if (!choice || choice.confidence < MIN_AUTOMATIC_HOOP_CONFIDENCE) continue;
+      const framePixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      const fallbackRim = rimFromAutomaticHoop(
+        choice.hoop,
+        canvas.width,
+        canvas.height,
+      );
+      const rim = refineAutomaticRim(fallbackRim, choice.hoop, framePixels);
+      const candidate = {
+        uri: frameUri,
+        atSeconds: video.currentTime,
+        rim,
+        confidence: choice.confidence,
+        candidates: learned.hoops.length,
+        ambiguous: choice.ambiguous,
+      };
+      if (!bestPreview || candidate.confidence > bestPreview.confidence) {
+        bestPreview = candidate;
+      }
+      if (choice.confidence >= 0.72 && !choice.ambiguous) break;
+    }
+
     return {
-      uri: canvas.toDataURL("image/jpeg", 0.92),
+      uri: bestPreview?.uri ?? fallbackUri,
       width: canvas.width,
       height: canvas.height,
       durationSeconds,
-      atSeconds: video.currentTime,
+      atSeconds: bestPreview?.atSeconds ?? fallbackTime,
+      automaticRim: bestPreview?.rim ?? null,
+      automaticRimConfidence: bestPreview?.confidence ?? 0,
+      automaticHoopCandidates: bestPreview?.candidates ?? 0,
+      automaticHoopAmbiguous: bestPreview?.ambiguous ?? false,
     };
   } finally {
     disposeVideo(video);

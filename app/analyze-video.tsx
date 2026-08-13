@@ -41,6 +41,7 @@ export default function AnalyzeVideoScreen() {
   const [video, setVideo] = useState<SelectedVideo | null>(null);
   const [preview, setPreview] = useState<VideoPreview | null>(null);
   const [rim, setRim] = useState<RimCalibration | null>(null);
+  const [rimSource, setRimSource] = useState<"automatic" | "manual" | null>(null);
   const [calibrating, setCalibrating] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -103,6 +104,7 @@ export default function AnalyzeVideoScreen() {
     setResult(null);
     setReviewRequest(null);
     setRim(null);
+    setRimSource(null);
     setPreview(null);
     setVideo({ uri: asset.uri, fileName: asset.fileName ?? "Basketball video" });
     try {
@@ -116,7 +118,12 @@ export default function AnalyzeVideoScreen() {
       }
       if (!cancelledRef.current) {
         setPreview(nextPreview);
-        setCalibrating(true);
+        setRim(nextPreview.automaticRim);
+        setRimSource(nextPreview.automaticRim ? "automatic" : null);
+        setCalibrating(!nextPreview.automaticRim);
+        if (!nextPreview.automaticRim) {
+          setError("Automatic hoop lock could not identify a clear target in the sampled frames. Draw the rim only as a fallback.");
+        }
       } else {
         await releaseVideoPreview(nextPreview.uri);
       }
@@ -145,6 +152,12 @@ export default function AnalyzeVideoScreen() {
         await releaseVideoPreview(nextPreview.uri);
       } else {
         setPreview(nextPreview);
+        setRim(nextPreview.automaticRim);
+        setRimSource(nextPreview.automaticRim ? "automatic" : null);
+        setCalibrating(!nextPreview.automaticRim);
+        if (!nextPreview.automaticRim) {
+          setError("No confident hoop was found on nearby frames. Draw the rim to continue.");
+        }
       }
     } catch (caught) {
       if (!cancelledRef.current) {
@@ -257,9 +270,9 @@ export default function AnalyzeVideoScreen() {
         </View>
 
         <Text style={styles.eyebrow}>RECORDED VIDEO ANALYSIS</Text>
-        <Text style={styles.title}>Import. Mark the rim once. Track every shot.</Text>
+        <Text style={styles.title}>Import. Auto-lock the hoop. Track every shot.</Text>
         <Text style={styles.body}>
-          A basketball-trained detector finds the hoop, ball, and players in each sampled frame, while ByteTrack preserves their identities. Processing stays on this device.
+          A basketball-trained detector automatically selects the hoop, ball, and players while ByteTrack preserves their identities. Adjust the rim only if the automatic lock is off target. Processing stays on this device.
         </Text>
 
         <View style={styles.actionsRow}>
@@ -276,6 +289,7 @@ export default function AnalyzeVideoScreen() {
               disabled={analyzing}
               onPress={() => {
                 setCalibrating(true);
+                setRimSource("manual");
                 setResult(null);
                 setReviewRequest(null);
               }}
@@ -308,7 +322,7 @@ export default function AnalyzeVideoScreen() {
           ) : null}
         </View>
 
-        {preparing ? <Text style={styles.status}>PREPARING VIDEO...</Text> : null}
+        {preparing ? <Text style={styles.status}>PREPARING VIDEO · FINDING HOOP...</Text> : null}
         {video ? (
           <View style={styles.fileRow}>
             <Text style={styles.fileName} numberOfLines={1}>{video.fileName}</Text>
@@ -330,6 +344,7 @@ export default function AnalyzeVideoScreen() {
               calibrating={calibrating}
               onRimChange={(nextRim) => {
                 setRim(nextRim);
+                setRimSource("manual");
                 setCalibrating(false);
                 setResult(null);
                 setReviewRequest(null);
@@ -339,7 +354,9 @@ export default function AnalyzeVideoScreen() {
             {rim ? (
               <View style={[styles.calibrationStatus, rimValidationError && styles.calibrationStatusError]}>
                 <Text style={[styles.calibrationStatusText, rimValidationError && styles.calibrationStatusTextError]}>
-                  {rimValidationError ?? "AI HOOP LOCK READY · THE DETECTOR WILL RE-FIND THIS RIM IN EVERY FRAME"}
+                  {rimValidationError ?? (rimSource === "automatic"
+                    ? `AUTO HOOP LOCK READY · ${Math.round((preview.automaticRimConfidence ?? 0) * 100)}% INITIAL CONFIDENCE · TRACKING EVERY FRAME`
+                    : "MANUAL HOOP CORRECTION READY · TRACKING EVERY FRAME")}
                 </Text>
               </View>
             ) : null}
@@ -425,7 +442,7 @@ export default function AnalyzeVideoScreen() {
               <View style={styles.noShots}>
                 <Text style={styles.noShotsTitle}>No complete shot trajectories found</Text>
                 <Text style={styles.noShotsBody}>
-                  No complete entry-and-exit sequence was found. Choose a clear calibration frame, mark the inside edge of the rim, and analyze again.
+                  No complete entry-and-exit sequence was found. Review the automatic hoop box; use Adjust rim only if it is visibly off target, then analyze again.
                 </Text>
               </View>
             ) : (

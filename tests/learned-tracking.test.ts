@@ -4,10 +4,12 @@ import { Tracker as ByteTracker } from "byte-track-ts";
 import type { BallDetection, RimCalibration } from "../types/tracking";
 import {
   chooseCalibrationHoop,
+  chooseAutomaticHoop,
   createHoopRimAnchor,
   mergeLearnedAndMotionCandidates,
   pixelBoxToBallDetection,
   rimFromTrackedHoop,
+  rimFromAutomaticHoop,
   toByteTrackDetections,
   trackRowToPixelBox,
   type PixelBox,
@@ -29,6 +31,32 @@ test("calibration chooses the learned hoop surrounding the marked rim", () => {
   );
   assert.ok(selected);
   assert.equal(selected.left, 430);
+});
+
+test("automatic calibration selects the strongest visible hoop", () => {
+  const selected = chooseAutomaticHoop(
+    [
+      { left: 40, top: 50, right: 90, bottom: 100, confidence: 0.31 },
+      { left: 430, top: 75, right: 530, bottom: 175, confidence: 0.9 },
+    ],
+    frameWidth,
+    frameHeight,
+  );
+  assert.ok(selected);
+  assert.equal(selected.hoop.left, 430);
+  assert.equal(selected.ambiguous, false);
+});
+
+test("automatic hoop geometry produces a narrow valid rim opening", () => {
+  const automatic = rimFromAutomaticHoop(
+    { left: 430, top: 75, right: 530, bottom: 175, confidence: 0.9 },
+    frameWidth,
+    frameHeight,
+  );
+  assert.ok(automatic.width >= 0.035);
+  assert.ok(automatic.height >= 0.012);
+  assert.ok((automatic.width * frameWidth) / (automatic.height * frameHeight) > 3);
+  assert.ok(automatic.y < 0.36);
 });
 
 test("rim anchor follows learned hoop translation and scale", () => {

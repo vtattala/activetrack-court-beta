@@ -48,6 +48,10 @@ export interface VideoPreview {
   height: number;
   durationSeconds: number;
   atSeconds: number;
+  automaticRim: RimCalibration | null;
+  automaticRimConfidence: number;
+  automaticHoopCandidates: number;
+  automaticHoopAmbiguous: boolean;
 }
 
 export interface VideoAnalysisOptions {
@@ -148,6 +152,10 @@ export async function createVideoPreview(
         atSeconds: Number.isFinite(thumbnail.actualTime)
           ? thumbnail.actualTime
           : safeTime,
+        automaticRim: null,
+        automaticRimConfidence: 0,
+        automaticHoopCandidates: 0,
+        automaticHoopAmbiguous: false,
       };
     } finally {
       thumbnail.release();

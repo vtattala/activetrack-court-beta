@@ -17,6 +17,12 @@ export interface HoopRimAnchor {
   heightScale: number;
 }
 
+export interface AutomaticHoopChoice {
+  hoop: PixelBox;
+  confidence: number;
+  ambiguous: boolean;
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -33,6 +39,67 @@ function boxCenter(box: PixelBox): { x: number; y: number } {
   return {
     x: (box.left + box.right) / 2,
     y: (box.top + box.bottom) / 2,
+  };
+}
+
+/**
+ * Selects the most useful hoop without a user-provided spatial hint. Detector
+ * confidence remains the primary signal; visible size is only a tie-breaker
+ * so a tiny high-confidence target is not displaced by a large false box.
+ */
+export function chooseAutomaticHoop(
+  hoops: PixelBox[],
+  frameWidth: number,
+  frameHeight: number,
+): AutomaticHoopChoice | null {
+  const frameArea = Math.max(1, frameWidth * frameHeight);
+  const ranked = hoops
+    .filter((hoop) => boxWidth(hoop) >= 8 && boxHeight(hoop) >= 5)
+    .map((hoop) => {
+      const visibleArea = boxWidth(hoop) * boxHeight(hoop) / frameArea;
+      return {
+        hoop,
+        score: hoop.confidence * 0.88 + Math.min(0.12, Math.sqrt(visibleArea) * 0.42),
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+  const first = ranked[0];
+  if (!first) return null;
+  const second = ranked[1];
+  return {
+    hoop: first.hoop,
+    confidence: clamp(first.score, 0, 1),
+    ambiguous: Boolean(second && first.score - second.score < 0.08),
+  };
+}
+
+/**
+ * Converts the learned detector's broader hoop object box into the narrow rim
+ * opening used by the entry/exit state machine. This geometry is the fallback
+ * for rims whose paint cannot be refined from frame pixels.
+ */
+export function rimFromAutomaticHoop(
+  hoop: PixelBox,
+  frameWidth: number,
+  frameHeight: number,
+): RimCalibration {
+  const hoopWidth = boxWidth(hoop);
+  const hoopHeight = boxHeight(hoop);
+  const center = boxCenter(hoop);
+  const rimWidthPixels = clamp(hoopWidth * 0.64, frameWidth * 0.035, frameWidth * 0.5);
+  const rimHeightPixels = clamp(
+    rimWidthPixels / 4.2,
+    frameHeight * 0.012,
+    Math.min(frameHeight * 0.28, hoopHeight * 0.3),
+  );
+  const rimCenterY = hoop.top + hoopHeight * 0.36;
+  const width = rimWidthPixels / frameWidth;
+  const height = rimHeightPixels / frameHeight;
+  return {
+    x: clamp(center.x / frameWidth - width / 2, 0, 1 - width),
+    y: clamp(rimCenterY / frameHeight - height / 2, 0, 1 - height),
+    width,
+    height,
   };
 }
 
