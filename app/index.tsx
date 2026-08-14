@@ -318,7 +318,7 @@ export default function CourtScreen() {
                 <Text style={styles.videoGatewayEyebrow}>FULL RECORDED-VIDEO ACTIVITY</Text>
                 <Text style={styles.videoGatewayTitle}>UPLOAD VIDEO. AUTO-LOCK HOOP. ANALYZE EVERY SHOT.</Text>
                 <Text style={styles.videoGatewayBody}>
-                  Run the basketball detector, ByteTrack hoop and ball lock, 30 FPS timing, make/miss scoring, replay, and manual review on a fixed-camera recording.
+                  Run the MIT basketball detector and its proven above-rim to below-net crossing counter at the evaluated 15 FPS sampling rate, with replay and manual review.
                 </Text>
                 <View style={styles.videoGatewayTags}>
                   <Text style={styles.videoGatewayTag}>ON-DEVICE</Text>

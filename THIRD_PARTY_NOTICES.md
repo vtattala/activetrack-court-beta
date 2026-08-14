@@ -2,16 +2,21 @@
 
 ActiveTrack's browser video analyzer includes the following third-party components:
 
-## E-BARD basketball object detector
+## Joseph Attalla basketball shot detector
 
-- Source: https://huggingface.co/GabrieleGiudici/E-BARD-detection-models
-- Model: `BODD_yolov8n_0001.pt`, exported to ONNX for local browser inference
-- Author: Gabriele Giudici
-- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
-- Original SHA-256: `DFE3534D51BB21024D1A400C37F0C1FBF0C8B96EA9A56A5F3CB5454813BFD641`
-- ONNX SHA-256: `843DCC481206EEFFBCC05C1390D8AC4561315A933DD4B96585F07CFB70FCBB01`
+- Source: https://github.com/josephattalla/Basketball-Shot-Detection
+- Revision: `e320817d0f87eceb4093c871de6d29d1adca0006`
+- Model: `bball_model.pt`, exported to ONNX for local browser inference
+- Author: Joseph Y Attalla
+- License: MIT; full text in `LICENSES/attalla-basketball-shot-detection-MIT.txt`
+- Original SHA-256: `40F3E596652A427BA290B3F72384E49AED12CAF1A8AE41BEAEF4A8FFFCF09FA3`
+- ONNX SHA-256: `5D2E8C0F39EAB69C98D371333ABF5E74F06A2245B5A7889D12352A620EF541A9`
 
-The model detects basketballs, hoops, players, and referees. See the model card for training data, evaluation results, and limitations.
+The model detects basketballs and hoops. ActiveTrack ports the repository's
+multi-ball/multi-hoop association and above-rim to below-net line-crossing
+classifier to strict TypeScript. The port fixes the upstream constructor typo,
+vertical-line division failure, frame-rate-dependent track expiry, and duplicate
+event handling while retaining the published detector thresholds and geometry.
 
 ## byte-track-ts
 
@@ -26,16 +31,7 @@ The model detects basketballs, hoops, players, and referees. See the model card 
 - License: MIT
 - Distribution: pinned jsDelivr package assets are loaded at runtime
 
-## Basketball scoring implementation references
-
-The scoring state machine is an independent TypeScript implementation. Its
-track-cleaning, trajectory-fitting, and above-rim/below-net design was informed
-by the public descriptions and behavior of basketball-analysis projects,
-including `avishah3/AI-Basketball-Shot-Detection-Tracker`,
-`chonyy/AI-basketball-analysis`, `AggieSportsAnalytics/ShotTracker`, and
-`srz08/basketball-shot-analysis`. ActiveTrack adds rim-relative smoothing,
-interpolated crossings, delayed miss decisions, confidence review, and strict
-adjacent-airball handling.
+## Prior systems evaluated but not incorporated
 
 No source or model weights from the unlicensed `avishah3`,
 `AggieSportsAnalytics`, or `srz08` repositories are incorporated. The `chonyy`

@@ -1,16 +1,17 @@
-const MODEL_URL = "/models/ebard-basketball-yolov8n.onnx";
+const MODEL_URL = "/models/attalla-basketball-yolov8n.onnx";
 const ORT_CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
 const RUNTIME_URL = `${ORT_CDN}ort.all.min.js`;
 const WASM_PATH = ORT_CDN;
-const LABELS = ["basketball", "hoop", "player", "referee"] as const;
-const MODEL_SIZE = 704;
+const LABELS = ["ball", "hoop"] as const;
+const MODEL_SIZE = 640;
 const CLASS_CONFIDENCE: Record<LearnedBasketballLabel, number> = {
-  basketball: 0.025,
-  hoop: 0.05,
-  player: 0.1,
-  referee: 0.12,
+  // Match the upstream detector's model.predict(conf=0.2). The shot tracker
+  // applies the upstream 0.4 ball / 0.3 hoop acceptance thresholds after it
+  // knows whether the ball is close to a hoop.
+  ball: 0.2,
+  hoop: 0.2,
 };
-const NMS_IOU = 0.58;
+const NMS_IOU = 0.7;
 
 export type LearnedBasketballLabel = (typeof LABELS)[number];
 
@@ -25,6 +26,7 @@ export interface LearnedObjectDetection {
 }
 
 export interface LearnedBasketballFrame {
+  objects: LearnedObjectDetection[];
   basketballs: LearnedObjectDetection[];
   hoops: LearnedObjectDetection[];
   players: LearnedObjectDetection[];
@@ -230,7 +232,7 @@ function decodeDetections(
         classId = candidateClass;
       }
     }
-    const label = LABELS[classId] ?? "basketball";
+    const label = LABELS[classId] ?? "ball";
     if (confidence < CLASS_CONFIDENCE[label]) continue;
     const centerX = Number(data[anchor] ?? 0);
     const centerY = Number(data[anchors + anchor] ?? 0);
@@ -304,9 +306,10 @@ async function createDetector(): Promise<LearnedBasketballDetector> {
       if (!output) throw new Error("The basketball detector produced no result.");
       const detections = decodeDetections(output, prepared);
       return {
-        basketballs: detections.filter((detection) => detection.label === "basketball"),
+        objects: detections,
+        basketballs: detections.filter((detection) => detection.label === "ball"),
         hoops: detections.filter((detection) => detection.label === "hoop"),
-        players: detections.filter((detection) => detection.label === "player"),
+        players: [],
       };
     },
   };

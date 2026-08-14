@@ -1,10 +1,11 @@
 import { Tracker as ByteTracker } from "byte-track-ts";
 
 import {
-  createTrackerEngineState,
-  MIN_AUTOMATIC_DECISION_CONFIDENCE,
-  stepTracker,
-} from "../tracking/engine";
+  createAttallaShotTrackerState,
+  stepAttallaShotTracker,
+  type AttallaObjectDetection,
+} from "../tracking/attallaShotTracker";
+import { MIN_AUTOMATIC_DECISION_CONFIDENCE } from "../tracking/engine";
 import type {
   BallDetection,
   PlayerDetection,
@@ -100,7 +101,7 @@ export async function startLiveBrowserPipeline(
   let running = true;
   let sessionActive = false;
   let timer: number | null = null;
-  let engine = createTrackerEngineState();
+  let shotTracker = createAttallaShotTrackerState();
   let visionTrack = createVisionTrackState();
   let rim: RimCalibration | null = null;
   let rimConfidence = 0;
@@ -110,8 +111,8 @@ export async function startLiveBrowserPipeline(
   let consecutiveFailures = 0;
 
   const resetShotTracking = () => {
-    const lastShotAt = engine.lastShotAt;
-    engine = { ...createTrackerEngineState(), lastShotAt };
+    const lastShotAt = shotTracker.lastShotAt;
+    shotTracker = { ...createAttallaShotTrackerState(), lastShotAt };
     visionTrack = createVisionTrackState();
   };
 
@@ -141,6 +142,29 @@ export async function startLiveBrowserPipeline(
       const frameHeight = video.videoHeight;
       const learned = await detector.detect(video);
       if (!running) return;
+
+      if (sessionActive) {
+        const detectorObjects: AttallaObjectDetection[] = learned.objects.map((detection) => {
+          const box = learnedDetectionToPixelBox(detection);
+          return {
+            kind: detection.label === "hoop" ? "hoop" : "ball",
+            x: (box.left + box.right) / 2,
+            y: (box.top + box.bottom) / 2,
+            width: box.right - box.left,
+            height: box.bottom - box.top,
+            confidence: box.confidence,
+          };
+        });
+        const shotStep = stepAttallaShotTracker(shotTracker, detectorObjects, now);
+        shotTracker = shotStep.state;
+        for (const decision of shotStep.decisions) {
+          if (decision.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE) {
+            callbacks.onShot(decision.kind);
+          } else {
+            callbacks.onReview();
+          }
+        }
+      }
 
       const rawHoops = learned.hoops.map(learnedDetectionToPixelBox);
       const trackedHoops = hoopAssociation
@@ -199,18 +223,6 @@ export async function startLiveBrowserPipeline(
         visionTrack = selection.state;
         ball = selection.detection;
 
-        if (sessionActive) {
-          const result = stepTracker(engine, ball, rim, now);
-          engine = result.state;
-          if (result.shot && result.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE) {
-            callbacks.onShot(result.shot);
-          } else if (result.shot) {
-            callbacks.onReview();
-          }
-          if (result.shot || result.reason === "cooldown") {
-            visionTrack = createVisionTrackState();
-          }
-        }
       } else {
         visionTrack = createVisionTrackState();
       }
@@ -245,7 +257,7 @@ export async function startLiveBrowserPipeline(
   return {
     setSessionActive(active) {
       sessionActive = active;
-      engine = createTrackerEngineState();
+      shotTracker = createAttallaShotTrackerState();
       visionTrack = createVisionTrackState();
     },
     relockHoop,

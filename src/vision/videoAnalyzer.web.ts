@@ -1,15 +1,15 @@
 import { Tracker as ByteTracker } from "byte-track-ts";
 import {
-  classifyVideoTrajectories,
-  type VideoTrajectorySample,
-} from "../tracking/videoTrajectoryClassifier";
+  createAttallaShotTrackerState,
+  stepAttallaShotTracker,
+  type AttallaObjectDetection,
+} from "../tracking/attallaShotTracker";
+import { MIN_AUTOMATIC_DECISION_CONFIDENCE } from "../tracking/engine";
 import type {
   RimCalibration,
   VideoAnalysisResult,
+  VideoShotDecision,
 } from "../../types/tracking";
-import { createVisionTrackState, selectTrackedBall } from "./ballTracker";
-import { detectBasketballCandidates } from "./pixelBallDetector";
-import { selectHoopZoneCandidates } from "./hoopZone";
 import { loadLearnedBasketballDetector } from "./learnedBasketballDetector.web";
 import {
   chooseBoxNearReference,
@@ -17,8 +17,6 @@ import {
   chooseCalibrationHoop,
   createHoopRimAnchor,
   learnedDetectionToPixelBox,
-  mergeLearnedAndMotionCandidates,
-  pixelBoxToBallDetection,
   rimFromAutomaticHoop,
   rimFromTrackedHoop,
   toByteTrackDetections,
@@ -33,9 +31,6 @@ import {
   stepRimTrackerFromDetection,
 } from "./rimTracker";
 import {
-  alignVisionTrackToRimShift,
-} from "./trackingAlignment";
-import {
   applyVideoQualityGate,
   buildVideoAnalysisDiagnostics,
   buildVideoFrameTimes,
@@ -47,10 +42,8 @@ import {
   stepVideoStability,
 } from "./videoAnalysisPolicy";
 import {
-  BALL_TRACKER_SETTINGS,
   HOOP_TRACKER_SETTINGS,
   MIN_AUTOMATIC_HOOP_CONFIDENCE,
-  PLAYER_TRACKER_SETTINGS,
 } from "./trackerSettings";
 
 export { IMPORT_ANALYSIS_FPS, MAX_IMPORT_DURATION_SECONDS };
@@ -342,8 +335,8 @@ export async function analyzeBasketballVideo(
   options: VideoAnalysisOptions = {},
 ): Promise<VideoAnalysisResult> {
   const video = await createLoadedVideo(uri);
-  let visionTrack = createVisionTrackState();
-  const trajectorySamples: VideoTrajectorySample[] = [];
+  let shotTracker = createAttallaShotTrackerState();
+  const shotDecisions: VideoShotDecision[] = [];
   let framesAnalyzed = 0;
   let samplesCompleted = 0;
   let duplicateFramesSkipped = 0;
@@ -359,8 +352,6 @@ export async function analyzeBasketballVideo(
   let playerTrackedFrames = 0;
   const learnedDetector = await loadLearnedBasketballDetector();
   const hoopAssociation = new ByteTracker(HOOP_TRACKER_SETTINGS);
-  const ballAssociation = new ByteTracker(BALL_TRACKER_SETTINGS);
-  const playerAssociation = new ByteTracker(PLAYER_TRACKER_SETTINGS);
 
   try {
     const durationSeconds = options.durationSeconds && options.durationSeconds > 0
@@ -430,13 +421,34 @@ export async function analyzeBasketballVideo(
       const learnedFrame = await learnedDetector.detect(canvas);
       if (learnedFrame.basketballs.length > 0) learnedBallDetectionFrames += 1;
       if (learnedFrame.hoops.length > 0) learnedHoopDetectionFrames += 1;
-      const rawPlayerBoxes = learnedFrame.players.map(learnedDetectionToPixelBox);
-      if (rawPlayerBoxes.length > 0) learnedPlayerDetectionFrames += 1;
-      const trackedPlayerBoxes = playerAssociation
-        .update(toByteTrackDetections(rawPlayerBoxes))
-        .map(trackRowToPixelBox)
-        .filter((box): box is PixelBox => box !== null);
-      if (trackedPlayerBoxes.length > 0) playerTrackedFrames += 1;
+      if (learnedFrame.players.length > 0) learnedPlayerDetectionFrames += 1;
+      const detectorObjects: AttallaObjectDetection[] = learnedFrame.objects.map((detection) => {
+        const box = learnedDetectionToPixelBox(detection);
+        return {
+          kind: detection.label === "hoop" ? "hoop" : "ball",
+          x: (box.left + box.right) / 2,
+          y: (box.top + box.bottom) / 2,
+          width: box.right - box.left,
+          height: box.bottom - box.top,
+          confidence: box.confidence,
+        };
+      });
+      const shotStep = stepAttallaShotTracker(shotTracker, detectorObjects, timestamp);
+      shotTracker = shotStep.state;
+      if (shotTracker.balls.length > 0) ballTrackedFrames += 1;
+      if (learnedFrame.basketballs.length > 0) ballCandidateFrames += 1;
+      for (const decision of shotStep.decisions) {
+        shotDecisions.push({
+          id: `${decision.atMs}-${shotDecisions.length}`,
+          atSeconds: decision.atMs / 1_000,
+          suggestedKind: decision.kind,
+          finalKind: decision.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE
+            ? decision.kind
+            : null,
+          confidence: decision.confidence,
+          reason: "rim-crossing",
+        });
+      }
       const rawHoopBoxes = learnedFrame.hoops.map(learnedDetectionToPixelBox);
       const trackedHoopBoxes = hoopAssociation
         .update(toByteTrackDetections(rawHoopBoxes))
@@ -470,20 +482,14 @@ export async function analyzeBasketballVideo(
         preferredHoopTrackId = trackedHoop.trackId ?? preferredHoopTrackId;
       }
 
-      const detectionFrame = detectBasketballCandidates(
-        pixels,
-        previousGray,
-        timestamp,
-        rimTrack.rim,
-      );
-      const lostRimFramesBeforeStep = rimTrack.consecutiveLostFrames;
+      const gray = frameGray(pixels);
       const learnedRim = trackedHoop && hoopAnchor
         ? rimFromTrackedHoop(trackedHoop, hoopAnchor, canvas.width, canvas.height)
         : null;
       const templateRimStep = learnedRim && trackedHoop
         ? null
         : stepRimTracker(
-          detectionFrame.gray,
+          gray,
           canvas.width,
           canvas.height,
           rimTrack,
@@ -494,34 +500,22 @@ export async function analyzeBasketballVideo(
           ? templateRimStep
           : stepFixedRimTracker(rimTrack);
       rimTrack = rimStep.state;
-      if (rimStep.found && lostRimFramesBeforeStep < 4) {
-        visionTrack = alignVisionTrackToRimShift(
-          visionTrack,
-          rimStep.displacementX,
-          rimStep.displacementY,
-        );
-      } else if (lostRimFramesBeforeStep >= 4) {
-        visionTrack = createVisionTrackState();
-      }
 
       let changedPixels = 0;
-      if (previousGray && previousGray.length === detectionFrame.gray.length) {
-        for (let index = 0; index < detectionFrame.gray.length; index += 1) {
-          if (Math.abs((detectionFrame.gray[index] ?? 0) - (previousGray[index] ?? 0)) >= 38) {
+      if (previousGray && previousGray.length === gray.length) {
+        for (let index = 0; index < gray.length; index += 1) {
+          if (Math.abs((gray[index] ?? 0) - (previousGray[index] ?? 0)) >= 38) {
             changedPixels += 1;
           }
         }
       }
       const changedPixelRatio = previousGray
-        ? changedPixels / Math.max(1, detectionFrame.gray.length)
+        ? changedPixels / Math.max(1, gray.length)
         : 0;
       stability = stepVideoStability(stability, changedPixelRatio);
-      previousGray = detectionFrame.gray;
+      previousGray = gray;
 
       if (!rimStep.found) {
-        if (rimStep.state.consecutiveLostFrames >= 2) {
-          visionTrack = createVisionTrackState();
-        }
         framesAnalyzed += 1;
         samplesCompleted += 1;
         options.onProgress?.(samplesCompleted, frameTimes.length);
@@ -529,47 +523,6 @@ export async function analyzeBasketballVideo(
           await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         }
         continue;
-      }
-
-      const rawBallBoxes = learnedFrame.basketballs.map(learnedDetectionToPixelBox);
-      const trackedBallBoxes = ballAssociation
-        .update(toByteTrackDetections(rawBallBoxes))
-        .map(trackRowToPixelBox)
-        .filter((box): box is PixelBox => box !== null);
-      const learnedBallCandidates = (trackedBallBoxes.length > 0
-        ? trackedBallBoxes
-        : rawBallBoxes
-      ).map((box) => pixelBoxToBallDetection(
-        box,
-        canvas.width,
-        canvas.height,
-        timestamp,
-      ));
-      const combinedCandidates = mergeLearnedAndMotionCandidates(
-        learnedBallCandidates,
-        detectionFrame.candidates,
-      );
-      const hoopCandidates = selectHoopZoneCandidates(
-        combinedCandidates,
-        rimStep.rim,
-        canvas.width,
-        canvas.height,
-      );
-      if (hoopCandidates.length > 0) ballCandidateFrames += 1;
-      const selection = selectTrackedBall(
-        hoopCandidates,
-        visionTrack,
-        rimStep.rim,
-        timestamp,
-      );
-      visionTrack = selection.state;
-      if (selection.detection) {
-        ballTrackedFrames += 1;
-        trajectorySamples.push({
-          atSeconds: timing.atSeconds,
-          ball: selection.detection,
-          rim: rimStep.rim,
-        });
       }
 
       framesAnalyzed += 1;
@@ -580,7 +533,6 @@ export async function analyzeBasketballVideo(
       }
     }
 
-    const decisions = classifyVideoTrajectories(trajectorySamples);
     const diagnostics = buildVideoAnalysisDiagnostics(
       framesAnalyzed,
       duplicateFramesSkipped,
@@ -604,7 +556,10 @@ export async function analyzeBasketballVideo(
     return {
       durationSeconds,
       framesAnalyzed,
-      decisions: applyVideoQualityGate(consolidateVideoShotDecisions(decisions), diagnostics),
+      decisions: applyVideoQualityGate(
+        consolidateVideoShotDecisions(shotDecisions),
+        diagnostics,
+      ),
       diagnostics,
     };
   } finally {

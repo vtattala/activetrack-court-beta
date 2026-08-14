@@ -264,7 +264,7 @@ export default function AnalyzeVideoScreen() {
               </Pressable>
             </Link>
             <View style={styles.videoModeBadge}>
-              <Text style={styles.videoModeText}>VIDEO UPLOAD · FULL-TRAJECTORY BETA</Text>
+              <Text style={styles.videoModeText}>VIDEO UPLOAD · OPEN-SOURCE BASELINE V13</Text>
             </View>
           </View>
         </View>
@@ -272,24 +272,24 @@ export default function AnalyzeVideoScreen() {
         <Text style={styles.eyebrow}>RECORDED VIDEO ANALYSIS</Text>
         <Text style={styles.title}>Upload. Auto-lock. Analyze every shot.</Text>
         <Text style={styles.body}>
-          The same basketball detector, tracker, confidence gate, and shot state machine used by ActiveTrack follow the hoop, ball, and players. Uploaded footage adds rim-relative track cleaning before the complete descent is scored. Processing stays on this device.
+          A basketball-specific YOLO model detects the ball and hoop. The MIT-licensed reference tracker then requires one continuous ball track above the rim and below the net before it classifies the rim-plane crossing. Processing stays on this device.
         </Text>
 
         <View style={styles.pipelineStrip}>
           <View style={styles.pipelineStep}>
             <Text style={styles.pipelineStepNumber}>01</Text>
-            <Text style={styles.pipelineStepTitle}>BASKETBALL YOLO</Text>
-            <Text style={styles.pipelineStepBody}>Hoop · ball · player detection</Text>
+            <Text style={styles.pipelineStepTitle}>ATTALLA YOLO</Text>
+            <Text style={styles.pipelineStepBody}>Basketball · hoop detections</Text>
           </View>
           <View style={styles.pipelineStep}>
             <Text style={styles.pipelineStepNumber}>02</Text>
-            <Text style={styles.pipelineStepTitle}>TRACK CLEANING</Text>
-            <Text style={styles.pipelineStepBody}>ByteTrack · jump rejection · smoothing</Text>
+            <Text style={styles.pipelineStepTitle}>REFERENCE TRACKER</Text>
+            <Text style={styles.pipelineStepBody}>Multi-ball · multi-hoop association</Text>
           </View>
           <View style={styles.pipelineStep}>
             <Text style={styles.pipelineStepNumber}>03</Text>
-            <Text style={styles.pipelineStepTitle}>FULL TRAJECTORY</Text>
-            <Text style={styles.pipelineStepBody}>Above rim · fitted crossing · net exit</Text>
+            <Text style={styles.pipelineStepTitle}>RIM CROSSING</Text>
+            <Text style={styles.pipelineStepBody}>Above rim · below net · opening test</Text>
           </View>
           <View style={styles.fixedCameraStep}>
             <Text style={styles.fixedCameraTitle}>FIXED CAMERA REQUIRED</Text>
@@ -572,7 +572,7 @@ function SmallButton({
 
 function formatDecisionReason(reason: string): string {
   switch (reason) {
-    case "rim-crossing": return "center crossed rim plane";
+    case "rim-crossing": return "detector track crossed the rim plane";
     case "rim-entry-exit": return "ball entered the rim and exited below the net";
     case "rim-proximity-exit": return "near-rim descent confirmed by centered net exit";
     case "rim-entry-lost": return "rim entry found; net exit needs review";

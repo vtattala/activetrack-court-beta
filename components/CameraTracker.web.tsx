@@ -401,7 +401,7 @@ export function CameraTracker({
             {mode === "demo" ? "SIMULATED EVENTS" : mode === "camera" ? "REAL CAMERA ANALYSIS" : "FIXED CAMERA REQUIRED"}
           </Text>
           <Text style={styles.pipelineNoticeBody}>
-            {mode === "camera" ? "YOLO detection · ByteTrack lock · entry + net-exit scoring" : "Keep the hoop and complete flight visible"}
+            {mode === "camera" ? "Attalla YOLO · detector tracking · rim-crossing scoring" : "Keep the hoop and complete flight visible"}
           </Text>
         </View>
         <FrameCorners />
