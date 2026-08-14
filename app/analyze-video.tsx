@@ -264,7 +264,7 @@ export default function AnalyzeVideoScreen() {
               </Pressable>
             </Link>
             <View style={styles.videoModeBadge}>
-              <Text style={styles.videoModeText}>VIDEO UPLOAD · LATEST PIPELINE</Text>
+              <Text style={styles.videoModeText}>VIDEO UPLOAD · FULL-TRAJECTORY BETA</Text>
             </View>
           </View>
         </View>
@@ -272,7 +272,7 @@ export default function AnalyzeVideoScreen() {
         <Text style={styles.eyebrow}>RECORDED VIDEO ANALYSIS</Text>
         <Text style={styles.title}>Upload. Auto-lock. Analyze every shot.</Text>
         <Text style={styles.body}>
-          The same basketball detector and scoring engine used by web ActiveTrack identifies the hoop, ball, and players. ByteTrack preserves each identity while complete rim-entry and centered below-net evidence confirms makes. Processing stays on this device.
+          The same basketball detector, tracker, confidence gate, and shot state machine used by ActiveTrack follow the hoop, ball, and players. Uploaded footage adds rim-relative track cleaning before the complete descent is scored. Processing stays on this device.
         </Text>
 
         <View style={styles.pipelineStrip}>
@@ -283,13 +283,13 @@ export default function AnalyzeVideoScreen() {
           </View>
           <View style={styles.pipelineStep}>
             <Text style={styles.pipelineStepNumber}>02</Text>
-            <Text style={styles.pipelineStepTitle}>BYTETRACK LOCK</Text>
-            <Text style={styles.pipelineStepBody}>Persistent identities every frame</Text>
+            <Text style={styles.pipelineStepTitle}>TRACK CLEANING</Text>
+            <Text style={styles.pipelineStepBody}>ByteTrack · jump rejection · smoothing</Text>
           </View>
           <View style={styles.pipelineStep}>
             <Text style={styles.pipelineStepNumber}>03</Text>
-            <Text style={styles.pipelineStepTitle}>SHOT VERIFICATION</Text>
-            <Text style={styles.pipelineStepBody}>Rim entry · net exit · airball lane</Text>
+            <Text style={styles.pipelineStepTitle}>FULL TRAJECTORY</Text>
+            <Text style={styles.pipelineStepBody}>Above rim · fitted crossing · net exit</Text>
           </View>
           <View style={styles.fixedCameraStep}>
             <Text style={styles.fixedCameraTitle}>FIXED CAMERA REQUIRED</Text>

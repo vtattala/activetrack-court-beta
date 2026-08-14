@@ -29,10 +29,19 @@ The model detects basketballs, hoops, players, and referees. See the model card 
 ## Basketball scoring implementation references
 
 The scoring state machine is an independent TypeScript implementation. Its
-trajectory-completion design was informed by public basketball-analysis
-projects, including `srz08/basketball-shot-analysis`, while preserving
-ActiveTrack's stricter entry, below-net confirmation, confidence review, and
-adjacent-airball rules. No source from that unlicensed repository is copied.
+track-cleaning, trajectory-fitting, and above-rim/below-net design was informed
+by the public descriptions and behavior of basketball-analysis projects,
+including `avishah3/AI-Basketball-Shot-Detection-Tracker`,
+`chonyy/AI-basketball-analysis`, `AggieSportsAnalytics/ShotTracker`, and
+`srz08/basketball-shot-analysis`. ActiveTrack adds rim-relative smoothing,
+interpolated crossings, delayed miss decisions, confidence review, and strict
+adjacent-airball handling.
+
+No source or model weights from the unlicensed `avishah3`,
+`AggieSportsAnalytics`, or `srz08` repositories are incorporated. The `chonyy`
+project includes a noncommercial OpenPose license and is not incorporated.
+`iamyb/shotcut` was reviewed but publishes a Windows binary rather than an
+integrable detector implementation.
 
 `sPappalard/SwishAI` was evaluated as an architectural reference. It uses a
 separately trained semantic "ball in basket" class and is licensed under AGPLv3;

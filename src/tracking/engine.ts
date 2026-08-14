@@ -29,6 +29,9 @@ export function createTrackerEngineState(): TrackerEngineState {
     rimProximityX: 0,
     rimProximityConfidence: 0,
     rimProximityFrames: 0,
+    crossedRimAt: 0,
+    crossedRimX: 0,
+    crossedRimConfidence: 0,
     lastDetectedAt: 0,
     lastShotAt: -SHOT_COOLDOWN_MS,
     previous: null,
@@ -52,6 +55,9 @@ function clearShotState(state: TrackerEngineState): TrackerEngineState {
     rimProximityX: 0,
     rimProximityConfidence: 0,
     rimProximityFrames: 0,
+    crossedRimAt: 0,
+    crossedRimX: 0,
+    crossedRimConfidence: 0,
     lastDetectedAt: 0,
     previous: null,
     trajectory: [],
@@ -99,6 +105,28 @@ function interpolateCrossingX(
     1,
   );
   return previous.x + (detection.x - previous.x) * ratio;
+}
+
+function fittedCrossingX(
+  trajectory: BallDetection[],
+  planeY: number,
+  rimHeight: number,
+): number | null {
+  const local = trajectory
+    .filter((point) => Math.abs(point.y - planeY) <= Math.max(0.025, rimHeight * 5.5))
+    .slice(-8);
+  if (local.length < 3) return null;
+  const meanY = local.reduce((sum, point) => sum + point.y, 0) / local.length;
+  const meanX = local.reduce((sum, point) => sum + point.x, 0) / local.length;
+  let covariance = 0;
+  let variance = 0;
+  for (const point of local) {
+    covariance += (point.y - meanY) * (point.x - meanX);
+    variance += (point.y - meanY) ** 2;
+  }
+  if (variance < 0.000005) return null;
+  const slope = covariance / variance;
+  return meanX + slope * (planeY - meanY);
 }
 
 export function stepTracker(
@@ -259,7 +287,11 @@ export function stepTracker(
   }
 
   if (!next.enteredRim && crossedEntryPlane) {
-    const crossingX = interpolateCrossingX(previous, detection, rimPlaneY);
+    const pairCrossingX = interpolateCrossingX(previous, detection, rimPlaneY);
+    const fittedX = fittedCrossingX(trajectory, rimPlaneY, rim.height);
+    const crossingX = fittedX !== null && Math.abs(fittedX - pairCrossingX) <= rim.width * 0.75
+      ? pairCrossingX * 0.58 + fittedX * 0.42
+      : pairCrossingX;
     const throughOpening = crossingX > safeLeft && crossingX < safeRight;
     const nearestBoundary = Math.min(
       Math.abs(crossingX - safeLeft),
@@ -275,18 +307,12 @@ export function stepTracker(
       ambiguousBoundary ? 0.82 : 0.98,
     );
 
-    const withinRecoverableOpening =
-      crossingX > proximityLeft && crossingX < proximityRight;
-
-    if (!throughOpening && !withinRecoverableOpening) {
-      return finishShot(
-        next,
-        "miss",
-        now,
-        ambiguousBoundary ? Math.min(0.82, entryConfidence) : entryConfidence,
-        "airball",
-      );
-    }
+    next = {
+      ...next,
+      crossedRimAt: now,
+      crossedRimX: crossingX,
+      crossedRimConfidence: entryConfidence,
+    };
 
     if (!throughOpening) {
       next = {
@@ -380,7 +406,48 @@ export function stepTracker(
     }
   }
 
-  const belowRim = detection.y > rimPlaneY + Math.max(rim.height * 2.8, averageBallRadiusY * 2.4);
+  if (
+    !next.enteredRim &&
+    next.crossedRimAt > 0 &&
+    now - next.crossedRimAt <= RIM_PROXIMITY_WINDOW_MS + 180
+  ) {
+    const exitPlaneY = rim.y + rim.height + Math.max(rim.height * 0.5, averageBallRadiusY * 0.5);
+    const crossedExitPlane =
+      movingDown &&
+      previous.y < exitPlaneY &&
+      detection.y >= exitPlaneY;
+    if (crossedExitPlane) {
+      const exitX = interpolateCrossingX(previous, detection, exitPlaneY);
+      const centeredExit = exitX > rimLeft + rim.width * 0.02 &&
+        exitX < rimRight - rim.width * 0.02;
+      if (centeredExit) {
+        const visualConfidence = Math.min(previous.confidence, detection.confidence);
+        const confidence =
+          Math.max(next.crossedRimConfidence, next.rimProximityConfidence) * 0.68 +
+          visualConfidence * 0.2 +
+          0.12;
+        return finishShot(next, "make", now, confidence, "rim-proximity-exit");
+      }
+
+      const outsideDistance = next.crossedRimX < rimLeft
+        ? rimLeft - next.crossedRimX
+        : next.crossedRimX > rimRight
+          ? next.crossedRimX - rimRight
+          : Math.min(Math.abs(exitX - rimLeft), Math.abs(exitX - rimRight));
+      const geometryConfidence = clamp(outsideDistance / Math.max(0.001, rim.width * 0.55), 0, 1);
+      const visualConfidence = Math.min(previous.confidence, detection.confidence);
+      return finishShot(
+        next,
+        "miss",
+        now,
+        0.82 + visualConfidence * 0.08 + geometryConfidence * 0.08,
+        "airball",
+      );
+    }
+  }
+
+  const belowRim = detection.y >
+    rim.y + rim.height + Math.max(rim.height * 0.5, averageBallRadiusY * 0.5);
   const outsideOpening = detection.x <= safeLeft || detection.x >= safeRight;
   const leftLocalLane = detection.x < localLeft || detection.x > localRight;
   const timedOut = now - next.armedAt > MAX_SHOT_FLIGHT_MS;
@@ -390,7 +457,7 @@ export function stepTracker(
     !next.enteredRim &&
     hasClearDescent &&
     now - next.armedAt > 260 &&
-    ((belowRim && outsideOpening) || leftLocalLane)
+    ((belowRim && outsideOpening) || (belowRim && leftLocalLane))
   ) {
     const visualConfidence = Math.min(previous.confidence, detection.confidence);
     return finishShot(

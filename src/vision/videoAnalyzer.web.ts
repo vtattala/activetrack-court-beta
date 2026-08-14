@@ -1,13 +1,11 @@
 import { Tracker as ByteTracker } from "byte-track-ts";
 import {
-  createTrackerEngineState,
-  MIN_AUTOMATIC_DECISION_CONFIDENCE,
-  stepTracker,
-} from "../tracking/engine";
+  classifyVideoTrajectories,
+  type VideoTrajectorySample,
+} from "../tracking/videoTrajectoryClassifier";
 import type {
   RimCalibration,
   VideoAnalysisResult,
-  VideoShotDecision,
 } from "../../types/tracking";
 import { createVisionTrackState, selectTrackedBall } from "./ballTracker";
 import { detectBasketballCandidates } from "./pixelBallDetector";
@@ -35,7 +33,6 @@ import {
   stepRimTrackerFromDetection,
 } from "./rimTracker";
 import {
-  alignTrackerEngineToRimShift,
   alignVisionTrackToRimShift,
 } from "./trackingAlignment";
 import {
@@ -345,9 +342,8 @@ export async function analyzeBasketballVideo(
   options: VideoAnalysisOptions = {},
 ): Promise<VideoAnalysisResult> {
   const video = await createLoadedVideo(uri);
-  let tracker = createTrackerEngineState();
   let visionTrack = createVisionTrackState();
-  const decisions: VideoShotDecision[] = [];
+  const trajectorySamples: VideoTrajectorySample[] = [];
   let framesAnalyzed = 0;
   let samplesCompleted = 0;
   let duplicateFramesSkipped = 0;
@@ -504,15 +500,8 @@ export async function analyzeBasketballVideo(
           rimStep.displacementX,
           rimStep.displacementY,
         );
-        tracker = alignTrackerEngineToRimShift(
-          tracker,
-          rimStep.displacementX,
-          rimStep.displacementY,
-        );
       } else if (lostRimFramesBeforeStep >= 4) {
-        const lastShotAt = tracker.lastShotAt;
         visionTrack = createVisionTrackState();
-        tracker = { ...createTrackerEngineState(), lastShotAt };
       }
 
       let changedPixels = 0;
@@ -531,9 +520,7 @@ export async function analyzeBasketballVideo(
 
       if (!rimStep.found) {
         if (rimStep.state.consecutiveLostFrames >= 2) {
-          const lastShotAt = tracker.lastShotAt;
           visionTrack = createVisionTrackState();
-          tracker = { ...createTrackerEngineState(), lastShotAt };
         }
         framesAnalyzed += 1;
         samplesCompleted += 1;
@@ -576,27 +563,13 @@ export async function analyzeBasketballVideo(
         timestamp,
       );
       visionTrack = selection.state;
-      if (selection.detection) ballTrackedFrames += 1;
-
-      const step = stepTracker(tracker, selection.detection, rimStep.rim, timestamp);
-      tracker = step.state;
-      if (step.shot) {
-        decisions.push({
-          id: `${timestamp}-${decisions.length}`,
+      if (selection.detection) {
+        ballTrackedFrames += 1;
+        trajectorySamples.push({
           atSeconds: timing.atSeconds,
-          suggestedKind: step.shot,
-          finalKind: step.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE
-            ? step.shot
-            : null,
-          confidence: step.confidence,
-          reason: step.reason,
+          ball: selection.detection,
+          rim: rimStep.rim,
         });
-      }
-      if (step.shot || step.reason === "cooldown") {
-        visionTrack = createVisionTrackState();
-      } else if (!visionTrack.current && !tracker.armed && tracker.previous) {
-        const lastShotAt = tracker.lastShotAt;
-        tracker = { ...createTrackerEngineState(), lastShotAt };
       }
 
       framesAnalyzed += 1;
@@ -607,6 +580,7 @@ export async function analyzeBasketballVideo(
       }
     }
 
+    const decisions = classifyVideoTrajectories(trajectorySamples);
     const diagnostics = buildVideoAnalysisDiagnostics(
       framesAnalyzed,
       duplicateFramesSkipped,

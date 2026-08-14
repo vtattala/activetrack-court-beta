@@ -12,14 +12,12 @@ import {
 } from "react-native-fast-opencv";
 
 import {
-  createTrackerEngineState,
-  MIN_AUTOMATIC_DECISION_CONFIDENCE,
-  stepTracker,
-} from "../tracking/engine";
+  classifyVideoTrajectories,
+  type VideoTrajectorySample,
+} from "../tracking/videoTrajectoryClassifier";
 import type {
   RimCalibration,
   VideoAnalysisResult,
-  VideoShotDecision,
 } from "../../types/tracking";
 import {
   detectOrangeBallCandidates,
@@ -219,9 +217,8 @@ export async function analyzeBasketballVideo(
 ): Promise<VideoAnalysisResult> {
   const player = await createReadyPlayer(uri);
   let framesAnalyzed = 0;
-  let tracker = createTrackerEngineState();
   let visionTrack = createVisionTrackState();
-  const decisions: VideoShotDecision[] = [];
+  const trajectorySamples: VideoTrajectorySample[] = [];
   let samplesCompleted = 0;
   let duplicateFramesSkipped = 0;
   let largestFrameGapMs = 0;
@@ -309,27 +306,13 @@ export async function analyzeBasketballVideo(
             if (hoopCandidates.length > 0) ballCandidateFrames += 1;
             const selection = selectTrackedBall(hoopCandidates, visionTrack, rim, timestamp);
             visionTrack = selection.state;
-            if (selection.detection) ballTrackedFrames += 1;
-
-            const step = stepTracker(tracker, selection.detection, rim, timestamp);
-            tracker = step.state;
-            if (step.shot) {
-              decisions.push({
-                id: `${timestamp}-${decisions.length}`,
+            if (selection.detection) {
+              ballTrackedFrames += 1;
+              trajectorySamples.push({
                 atSeconds: timing.atSeconds,
-                suggestedKind: step.shot,
-                finalKind: step.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE
-                  ? step.shot
-                  : null,
-                confidence: step.confidence,
-                reason: step.reason,
+                ball: selection.detection,
+                rim,
               });
-            }
-            if (step.shot || step.reason === "cooldown") {
-              visionTrack = createVisionTrackState();
-            } else if (!visionTrack.current && !tracker.armed && tracker.previous) {
-              const lastShotAt = tracker.lastShotAt;
-              tracker = { ...createTrackerEngineState(), lastShotAt };
             }
           } finally {
             source?.release();
@@ -362,6 +345,7 @@ export async function analyzeBasketballVideo(
       }
     }
 
+    const decisions = classifyVideoTrajectories(trajectorySamples);
     const diagnostics = buildVideoAnalysisDiagnostics(
       framesAnalyzed,
       duplicateFramesSkipped,

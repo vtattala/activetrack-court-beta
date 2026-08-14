@@ -51,5 +51,8 @@ export function alignTrackerEngineToRimShift(
     rimProximityX: state.rimProximityFrames > 0
       ? clamp(state.rimProximityX + displacementX)
       : state.rimProximityX,
+    crossedRimX: state.crossedRimAt > 0
+      ? clamp(state.crossedRimX + displacementX)
+      : state.crossedRimX,
   };
 }

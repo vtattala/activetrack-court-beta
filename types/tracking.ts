@@ -58,6 +58,9 @@ export interface TrackerEngineState {
   rimProximityX: number;
   rimProximityConfidence: number;
   rimProximityFrames: number;
+  crossedRimAt: number;
+  crossedRimX: number;
+  crossedRimConfidence: number;
   lastDetectedAt: number;
   lastShotAt: number;
   previous: BallDetection | null;
