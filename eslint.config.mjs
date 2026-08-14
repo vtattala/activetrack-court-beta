@@ -5,6 +5,7 @@ export default defineConfig([
   expoConfig,
   globalIgnores([
     ".expo/**",
+    ".codex/**",
     ".next/**",
     ".vinext/**",
     ".wrangler/**",

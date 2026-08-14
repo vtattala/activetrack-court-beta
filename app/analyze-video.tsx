@@ -264,16 +264,38 @@ export default function AnalyzeVideoScreen() {
               </Pressable>
             </Link>
             <View style={styles.videoModeBadge}>
-              <Text style={styles.videoModeText}>ADDED MODE: VIDEO ANALYSIS</Text>
+              <Text style={styles.videoModeText}>VIDEO UPLOAD · LATEST PIPELINE</Text>
             </View>
           </View>
         </View>
 
         <Text style={styles.eyebrow}>RECORDED VIDEO ANALYSIS</Text>
-        <Text style={styles.title}>Import. Auto-lock the hoop. Track every shot.</Text>
+        <Text style={styles.title}>Upload. Auto-lock. Analyze every shot.</Text>
         <Text style={styles.body}>
-          A basketball-trained detector automatically selects the hoop, ball, and players while ByteTrack preserves their identities. Adjust the rim only if the automatic lock is off target. Processing stays on this device.
+          The same basketball detector and scoring engine used by web ActiveTrack identifies the hoop, ball, and players. ByteTrack preserves each identity while complete rim-entry and centered below-net evidence confirms makes. Processing stays on this device.
         </Text>
+
+        <View style={styles.pipelineStrip}>
+          <View style={styles.pipelineStep}>
+            <Text style={styles.pipelineStepNumber}>01</Text>
+            <Text style={styles.pipelineStepTitle}>BASKETBALL YOLO</Text>
+            <Text style={styles.pipelineStepBody}>Hoop · ball · player detection</Text>
+          </View>
+          <View style={styles.pipelineStep}>
+            <Text style={styles.pipelineStepNumber}>02</Text>
+            <Text style={styles.pipelineStepTitle}>BYTETRACK LOCK</Text>
+            <Text style={styles.pipelineStepBody}>Persistent identities every frame</Text>
+          </View>
+          <View style={styles.pipelineStep}>
+            <Text style={styles.pipelineStepNumber}>03</Text>
+            <Text style={styles.pipelineStepTitle}>SHOT VERIFICATION</Text>
+            <Text style={styles.pipelineStepBody}>Rim entry · net exit · airball lane</Text>
+          </View>
+          <View style={styles.fixedCameraStep}>
+            <Text style={styles.fixedCameraTitle}>FIXED CAMERA REQUIRED</Text>
+            <Text style={styles.fixedCameraBody}>Keep the device and hoop still for the complete recording.</Text>
+          </View>
+        </View>
 
         <View style={styles.actionsRow}>
           <ActionButton
@@ -647,6 +669,37 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 7,
   },
+  pipelineStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.surface,
+    marginTop: 18,
+  },
+  pipelineStep: {
+    flex: 1,
+    minWidth: 175,
+    minHeight: 86,
+    borderRightWidth: 1,
+    borderRightColor: colors.line,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+  },
+  pipelineStepNumber: { color: colors.orange, fontFamily: monoFont, fontSize: 8, fontWeight: "900" },
+  pipelineStepTitle: { color: colors.text, fontFamily: monoFont, fontSize: 9, fontWeight: "900", marginTop: 6 },
+  pipelineStepBody: { color: colors.muted, fontSize: 8, lineHeight: 12, marginTop: 4 },
+  fixedCameraStep: {
+    flex: 1.15,
+    minWidth: 210,
+    minHeight: 86,
+    justifyContent: "center",
+    backgroundColor: colors.orangeSoft,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  fixedCameraTitle: { color: colors.orange, fontFamily: monoFont, fontSize: 9, fontWeight: "900" },
+  fixedCameraBody: { color: colors.text, fontSize: 8, lineHeight: 12, marginTop: 5 },
   actionsRow: {
     flexDirection: "row",
     flexWrap: "wrap",

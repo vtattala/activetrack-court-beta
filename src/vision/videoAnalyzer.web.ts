@@ -49,34 +49,16 @@ import {
   resolveVideoSampleTiming,
   stepVideoStability,
 } from "./videoAnalysisPolicy";
+import {
+  BALL_TRACKER_SETTINGS,
+  HOOP_TRACKER_SETTINGS,
+  MIN_AUTOMATIC_HOOP_CONFIDENCE,
+  PLAYER_TRACKER_SETTINGS,
+} from "./trackerSettings";
 
 export { IMPORT_ANALYSIS_FPS, MAX_IMPORT_DURATION_SECONDS };
 const ANALYSIS_MAX_WIDTH = 640;
 const ANALYSIS_MAX_HEIGHT = 640;
-const HOOP_TRACKER_SETTINGS = {
-  track_high_thresh: 0.08,
-  track_low_thresh: 0.025,
-  new_track_thresh: 0.08,
-  track_buffer: 36,
-  match_thresh: 0.78,
-  fuse_score: true,
-};
-const BALL_TRACKER_SETTINGS = {
-  track_high_thresh: 0.22,
-  track_low_thresh: 0.05,
-  new_track_thresh: 0.2,
-  track_buffer: 18,
-  match_thresh: 0.82,
-  fuse_score: true,
-};
-const PLAYER_TRACKER_SETTINGS = {
-  track_high_thresh: 0.32,
-  track_low_thresh: 0.08,
-  new_track_thresh: 0.3,
-  track_buffer: 45,
-  match_thresh: 0.8,
-  fuse_score: true,
-};
 
 export interface VideoPreview {
   uri: string;
@@ -188,13 +170,6 @@ function createFrameCanvas(
   return canvas;
 }
 
-function drawVideoFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement): CanvasRenderingContext2D {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("This browser cannot read video frames.");
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return context;
-}
-
 function frameGray(pixels: ImageData): Uint8Array {
   const gray = new Uint8Array(pixels.width * pixels.height);
   for (let index = 0; index < gray.length; index += 1) {
@@ -208,7 +183,6 @@ function frameGray(pixels: ImageData): Uint8Array {
   return gray;
 }
 
-const MIN_AUTOMATIC_HOOP_CONFIDENCE = 0.18;
 
 function buildAutomaticHoopScanTimes(
   requestedTime: number,

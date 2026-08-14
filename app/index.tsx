@@ -186,7 +186,7 @@ export default function CourtScreen() {
             {!compact ? (
               <>
                 <View style={styles.betaBadge}>
-                  <Text style={styles.betaText}>BETA 01</Text>
+                  <Text style={styles.betaText}>ACTIVE BETA</Text>
                 </View>
                 <View style={styles.privacyBadge}>
                   <View style={styles.privacyDot} />
@@ -243,23 +243,13 @@ export default function CourtScreen() {
             <Text style={styles.heroTitle}>YOUR REPS.</Text>
             <Text style={styles.heroTitleOrange}>COUNTED.</Text>
             <Text style={styles.heroBody}>
-              Set your phone courtside. ActiveTrack follows the ball and calls every make and miss while you shoot.
+              Set a fixed camera courtside. ActiveTrack locks onto the hoop, follows the ball and player, and confirms makes at the rim and below the net.
             </Text>
-            {!sessionActive ? (
-              <Link href="/analyze-video" asChild>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Upload and analyze a recorded basketball video"
-                  style={({ pressed }) => [styles.uploadCallout, pressed && styles.pressed]}
-                >
-                  <View style={styles.uploadCalloutCopy}>
-                    <Text style={styles.uploadCalloutEyebrow}>RECORDED A SESSION?</Text>
-                    <Text style={styles.uploadCalloutTitle}>UPLOAD &amp; ANALYZE VIDEO</Text>
-                  </View>
-                  <Text style={styles.uploadCalloutArrow}>→</Text>
-                </Pressable>
-              </Link>
-            ) : null}
+            <View style={styles.pipelineHighlights}>
+              <Text style={styles.pipelineHighlight}>HOOP LOCK</Text>
+              <Text style={styles.pipelineHighlight}>BALL + PLAYER TRACK</Text>
+              <Text style={styles.pipelineHighlight}>ENTRY + NET EXIT</Text>
+            </View>
           </View>
           <SessionStats
             makes={makes}
@@ -303,6 +293,46 @@ export default function CourtScreen() {
             ) : null}
           </View>
         </View>
+
+        {sessionActive ? (
+          <View style={[styles.videoGateway, compact && styles.videoGatewayCompact, styles.videoGatewayDisabled]}>
+            <View style={styles.videoGatewayCopy}>
+              <Text style={styles.videoGatewayEyebrow}>SECOND ACTIVITY · AVAILABLE AFTER THIS SESSION</Text>
+              <Text style={styles.videoGatewayTitle}>VIDEO UPLOAD ANALYZER</Text>
+              <Text style={styles.videoGatewayBody}>End the live session to open recorded-video analysis.</Text>
+            </View>
+            <Text style={styles.videoGatewayArrow}>→</Text>
+          </View>
+        ) : (
+          <Link href="/analyze-video" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open the latest recorded video upload analyzer"
+              style={({ pressed }) => [
+                styles.videoGateway,
+                compact && styles.videoGatewayCompact,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.videoGatewayCopy}>
+                <Text style={styles.videoGatewayEyebrow}>FULL RECORDED-VIDEO ACTIVITY</Text>
+                <Text style={styles.videoGatewayTitle}>UPLOAD VIDEO. AUTO-LOCK HOOP. ANALYZE EVERY SHOT.</Text>
+                <Text style={styles.videoGatewayBody}>
+                  Run the basketball detector, ByteTrack hoop and ball lock, 30 FPS timing, make/miss scoring, replay, and manual review on a fixed-camera recording.
+                </Text>
+                <View style={styles.videoGatewayTags}>
+                  <Text style={styles.videoGatewayTag}>ON-DEVICE</Text>
+                  <Text style={styles.videoGatewayTag}>AUTO HOOP FINDER</Text>
+                  <Text style={styles.videoGatewayTag}>MAKE / MISS REVIEW</Text>
+                </View>
+              </View>
+              <View style={[styles.videoGatewayAction, compact && styles.videoGatewayActionCompact]}>
+                <Text style={styles.videoGatewayActionLabel}>OPEN VIDEO UPLOAD</Text>
+                <Text style={styles.videoGatewayArrow}>→</Text>
+              </View>
+            </Pressable>
+          </Link>
+        )}
 
         <View style={styles.footer}>
           <Text style={styles.footerBrand}>ACTIVETRACK / COURT VISION BETA</Text>
@@ -441,44 +471,26 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     marginTop: 14,
   },
-  uploadCallout: {
-    width: "100%",
-    maxWidth: 520,
-    minHeight: 66,
+  pipelineHighlights: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.orange,
-    borderWidth: 1,
-    borderColor: colors.orange,
-    marginTop: 18,
-    paddingHorizontal: 17,
-    paddingVertical: 11,
+    marginTop: 15,
+    marginHorizontal: -4,
   },
-  uploadCalloutCopy: {
-    flex: 1,
-  },
-  uploadCalloutEyebrow: {
-    color: "rgba(255,255,255,0.78)",
+  pipelineHighlight: {
+    color: colors.acid,
     fontFamily: monoFont,
     fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-  },
-  uploadCalloutTitle: {
-    color: colors.white,
-    fontFamily: monoFont,
-    fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.7,
-    marginTop: 3,
-  },
-  uploadCalloutArrow: {
-    color: colors.white,
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: "400",
-    marginLeft: 14,
+    letterSpacing: 0.8,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    marginHorizontal: 4,
+    marginBottom: 7,
   },
   workspace: {
     flexDirection: "row",
@@ -502,6 +514,76 @@ const styles = StyleSheet.create({
     marginLeft: 0,
     marginTop: 34,
   },
+  videoGateway: {
+    minHeight: 142,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.orange,
+    borderWidth: 1,
+    borderColor: colors.orange,
+    marginHorizontal: 24,
+    marginTop: 34,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    shadowColor: colors.acid,
+    shadowOffset: { width: 7, height: 7 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  videoGatewayDisabled: { opacity: 0.42, shadowOpacity: 0 },
+  videoGatewayCompact: { flexDirection: "column", alignItems: "stretch" },
+  videoGatewayCopy: { flex: 1, maxWidth: 820 },
+  videoGatewayEyebrow: {
+    color: "rgba(255,255,255,0.82)",
+    fontFamily: monoFont,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  videoGatewayTitle: {
+    color: colors.white,
+    fontSize: 23,
+    lineHeight: 27,
+    fontWeight: "900",
+    letterSpacing: -1.2,
+    marginTop: 6,
+  },
+  videoGatewayBody: {
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 10,
+    lineHeight: 15,
+    maxWidth: 760,
+    marginTop: 6,
+  },
+  videoGatewayTags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 10,
+    marginHorizontal: -4,
+  },
+  videoGatewayTag: {
+    color: colors.white,
+    fontFamily: monoFont,
+    fontSize: 7,
+    fontWeight: "900",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.56)",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginHorizontal: 4,
+    marginBottom: 4,
+  },
+  videoGatewayAction: { minWidth: 178, alignItems: "flex-end", marginLeft: 22 },
+  videoGatewayActionCompact: { minWidth: 0, alignItems: "flex-start", marginLeft: 0, marginTop: 16 },
+  videoGatewayActionLabel: {
+    color: colors.white,
+    fontFamily: monoFont,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  videoGatewayArrow: { color: colors.white, fontSize: 42, lineHeight: 44, marginTop: 5 },
   recap: {
     backgroundColor: colors.acid,
     borderWidth: 1,

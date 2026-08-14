@@ -2,13 +2,13 @@
 
 ActiveTrack is an Expo SDK 57 basketball camera app that counts makes and misses in real time. Camera frames stay on the device and are processed by VisionCamera 5, Skia, GPU resizing, worklets, and Fast OpenCV. The live view tracks the ball's predicted trajectory and the dominant moving player independently, so player appearance is never used as a basketball signal.
 
-The recorded-video route accepts a device-library video up to five minutes long, lets the user choose a clear calibration frame and mark the rim, then runs a basketball-trained YOLO detector over decoded frames at 30 FPS. ByteTrack associates hoop, ball, and player detections across frames; the manual rim calibration remains authoritative for a fixed camera and anchors to a learned hoop track only after a sustained lock. The existing motion detector fills short ball-detection gaps. Scoring pauses while video quality is uncertain instead of guessing. Makes require a tracked ball to enter above the rim plane and exit below it; adjacent downward crossings are misses, and every result can be replayed and corrected.
+The browser ActiveTrack camera and recorded-video route use the same basketball-trained YOLO detector, ByteTrack settings, and pure scoring state machine. The live browser camera automatically finds the hoop and keeps its tracked identity while following the ball and primary player. The video route accepts a device-library recording up to five minutes long, automatically selects a clear hoop frame, and analyzes decoded frames at 30 FPS; manual rim adjustment remains available only as a correction. Makes require a descending ball to enter the rim and exit through the net corridor, with a near-rim recovery path for skipped detector frames. Adjacent crossings and completed trajectories that leave the scoring lane are misses. Low-confidence decisions remain uncounted for review.
 
 For best tracking, record in landscape 10-20 feet from the hoop, keep the rim and ball visible, avoid hard cuts or extreme zoom changes, and use even court lighting. No vision system can promise zero mistakes on arbitrary footage; this is a beta and its thresholds still need validation against a larger labeled-video set.
 
 ## Run locally
 
-For the localhost preview, run `npm run web` and open `http://localhost:8081`. The browser supports demo sessions, history, manual corrections, rim calibration, and local recorded-video analysis. Its camera card is an explicitly labeled simulation.
+For the localhost preview, run `npm run web` and open `http://localhost:8081`. The browser supports real camera analysis on secure origins, a separately labeled simulation, history, manual corrections, automatic hoop lock, and local recorded-video analysis. Camera permission and model support vary by browser; the deployed HTTPS site is the recommended web test surface.
 
 The real-time camera pipeline uses native frame processors and requires an Expo development build. Expo Go cannot load the tracking modules.
 

@@ -25,3 +25,15 @@ The model detects basketballs, hoops, players, and referees. See the model card 
 - Version: 1.27.0
 - License: MIT
 - Distribution: pinned jsDelivr package assets are loaded at runtime
+
+## Basketball scoring implementation references
+
+The scoring state machine is an independent TypeScript implementation. Its
+trajectory-completion design was informed by public basketball-analysis
+projects, including `srz08/basketball-shot-analysis`, while preserving
+ActiveTrack's stricter entry, below-net confirmation, confidence review, and
+adjacent-airball rules. No source from that unlicensed repository is copied.
+
+`sPappalard/SwishAI` was evaluated as an architectural reference. It uses a
+separately trained semantic "ball in basket" class and is licensed under AGPLv3;
+its source and weights are not incorporated into ActiveTrack.
