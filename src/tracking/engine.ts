@@ -11,6 +11,7 @@ export const LOST_BALL_MISS_MS = 900;
 export const MAX_SHOT_FLIGHT_MS = 3_400;
 export const MIN_AUTOMATIC_DECISION_CONFIDENCE = 0.86;
 const MAX_TRAJECTORY_POINTS = 30;
+const RIM_PROXIMITY_WINDOW_MS = 520;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -24,6 +25,10 @@ export function createTrackerEngineState(): TrackerEngineState {
     entryAt: 0,
     entryX: 0,
     entryConfidence: 0,
+    rimProximityAt: 0,
+    rimProximityX: 0,
+    rimProximityConfidence: 0,
+    rimProximityFrames: 0,
     lastDetectedAt: 0,
     lastShotAt: -SHOT_COOLDOWN_MS,
     previous: null,
@@ -43,6 +48,10 @@ function clearShotState(state: TrackerEngineState): TrackerEngineState {
     entryAt: 0,
     entryX: 0,
     entryConfidence: 0,
+    rimProximityAt: 0,
+    rimProximityX: 0,
+    rimProximityConfidence: 0,
+    rimProximityFrames: 0,
     lastDetectedAt: 0,
     previous: null,
     trajectory: [],
@@ -213,6 +222,42 @@ export function stepTracker(
     previous.y < rimPlaneY &&
     detection.y >= rimPlaneY;
 
+  // A detector can miss the thin rim-plane sample or put the ball center a few
+  // pixels outside the calibrated opening. Preserve a short, descending
+  // near-rim observation so that a later, centered exit below the net can
+  // still verify the make. This is deliberately narrower than the general
+  // approach lane so adjacent airballs never receive this evidence.
+  const proximityTolerance = Math.max(rim.width * 0.14, averageBallRadiusX * 0.55);
+  const proximityLeft = rimLeft - proximityTolerance;
+  const proximityRight = rimRight + proximityTolerance;
+  const proximityBandTop = rimPlaneY - Math.max(rim.height * 0.95, averageBallRadiusY * 0.8);
+  const proximityBandBottom = rimPlaneY + Math.max(rim.height * 0.95, averageBallRadiusY * 0.8);
+  const inRimProximityBand =
+    movingDown &&
+    detection.x > proximityLeft &&
+    detection.x < proximityRight &&
+    detection.y > proximityBandTop &&
+    detection.y < proximityBandBottom;
+
+  if (!next.enteredRim && inRimProximityBand) {
+    const centerDistance = Math.abs(detection.x - (rimLeft + rimRight) / 2) /
+      Math.max(0.001, rim.width / 2 + proximityTolerance);
+    const centeredConfidence = 1 - clamp(centerDistance, 0, 1);
+    const visualConfidence = Math.min(previous.confidence, detection.confidence);
+    const proximityConfidence = clamp(
+      0.79 + visualConfidence * 0.11 + centeredConfidence * 0.08,
+      0,
+      0.96,
+    );
+    next = {
+      ...next,
+      rimProximityAt: now,
+      rimProximityX: detection.x,
+      rimProximityConfidence: Math.max(next.rimProximityConfidence, proximityConfidence),
+      rimProximityFrames: Math.min(4, next.rimProximityFrames + 1),
+    };
+  }
+
   if (!next.enteredRim && crossedEntryPlane) {
     const crossingX = interpolateCrossingX(previous, detection, rimPlaneY);
     const throughOpening = crossingX > safeLeft && crossingX < safeRight;
@@ -230,7 +275,10 @@ export function stepTracker(
       ambiguousBoundary ? 0.82 : 0.98,
     );
 
-    if (!throughOpening) {
+    const withinRecoverableOpening =
+      crossingX > proximityLeft && crossingX < proximityRight;
+
+    if (!throughOpening && !withinRecoverableOpening) {
       return finishShot(
         next,
         "miss",
@@ -240,13 +288,28 @@ export function stepTracker(
       );
     }
 
-    next = {
-      ...next,
-      enteredRim: true,
-      entryAt: now,
-      entryX: crossingX,
-      entryConfidence,
-    };
+    if (!throughOpening) {
+      next = {
+        ...next,
+        rimProximityAt: now,
+        rimProximityX: crossingX,
+        rimProximityConfidence: Math.max(
+          next.rimProximityConfidence,
+          Math.min(0.92, entryConfidence),
+        ),
+        rimProximityFrames: Math.max(1, next.rimProximityFrames),
+      };
+    }
+
+    if (throughOpening) {
+      next = {
+        ...next,
+        enteredRim: true,
+        entryAt: now,
+        entryX: crossingX,
+        entryConfidence,
+      };
+    }
   }
 
   if (next.enteredRim) {
@@ -282,6 +345,38 @@ export function stepTracker(
         Math.min(0.84, 0.7 + detection.confidence * 0.12),
         "airball",
       );
+    }
+  }
+
+  if (
+    !next.enteredRim &&
+    next.rimProximityFrames > 0 &&
+    now - next.rimProximityAt <= RIM_PROXIMITY_WINDOW_MS
+  ) {
+    const exitPlaneY = rim.y + rim.height + Math.max(rim.height * 0.5, averageBallRadiusY * 0.5);
+    const crossedExitPlane =
+      movingDown &&
+      previous.y < exitPlaneY &&
+      detection.y >= exitPlaneY;
+    const exitX = crossedExitPlane
+      ? interpolateCrossingX(previous, detection, exitPlaneY)
+      : detection.x;
+    const insideTightNetCorridor =
+      exitX > rimLeft + rim.width * 0.04 &&
+      exitX < rimRight - rim.width * 0.04;
+
+    if (crossedExitPlane && insideTightNetCorridor) {
+      const visualConfidence = Math.min(previous.confidence, detection.confidence);
+      const centerDistance = Math.abs(exitX - (rimLeft + rimRight) / 2) /
+        Math.max(0.001, rim.width / 2);
+      const centeredConfidence = 1 - clamp(centerDistance, 0, 1);
+      const continuityBonus = Math.min(0.04, next.rimProximityFrames * 0.025);
+      const confidence =
+        next.rimProximityConfidence * 0.7 +
+        visualConfidence * 0.2 +
+        centeredConfidence * 0.1 +
+        continuityBonus;
+      return finishShot(next, "make", now, confidence, "rim-proximity-exit");
     }
   }
 

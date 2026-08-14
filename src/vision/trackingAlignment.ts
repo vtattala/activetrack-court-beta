@@ -48,5 +48,8 @@ export function alignTrackerEngineToRimShift(
     ),
     apexY: state.trajectory.length > 0 ? clamp(state.apexY + displacementY) : state.apexY,
     entryX: state.enteredRim ? clamp(state.entryX + displacementX) : state.entryX,
+    rimProximityX: state.rimProximityFrames > 0
+      ? clamp(state.rimProximityX + displacementX)
+      : state.rimProximityX,
   };
 }

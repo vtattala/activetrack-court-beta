@@ -54,6 +54,10 @@ export interface TrackerEngineState {
   entryAt: number;
   entryX: number;
   entryConfidence: number;
+  rimProximityAt: number;
+  rimProximityX: number;
+  rimProximityConfidence: number;
+  rimProximityFrames: number;
   lastDetectedAt: number;
   lastShotAt: number;
   previous: BallDetection | null;
@@ -71,6 +75,7 @@ export interface TrackerStep {
     | "none"
     | "rim-crossing"
     | "rim-entry-exit"
+    | "rim-proximity-exit"
     | "rim-entry-lost"
     | "airball"
     | "lost"

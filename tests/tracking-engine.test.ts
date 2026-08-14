@@ -140,6 +140,33 @@ test("routes a near-edge rim crossing to review instead of automatic counting", 
   assert.ok(result.confidence < MIN_AUTOMATIC_DECISION_CONFIDENCE);
 });
 
+test("recovers a made shot when a jittery detection misses the safe rim opening", () => {
+  let state = createTrackerEngineState();
+  state = step(state, ball(0.5, 0.42, 0), 0).state;
+  state = step(state, ball(0.5, 0.17, 100), 100).state;
+  state = step(state, ball(0.5, 0.12, 200), 200).state;
+
+  const nearRim = step(state, ball(0.61, 0.25, 450), 450);
+  assert.equal(nearRim.shot, null);
+  assert.equal(nearRim.state.enteredRim, false);
+  assert.ok(nearRim.state.rimProximityAt > 0);
+
+  const result = step(nearRim.state, ball(0.51, 0.31, 500), 500);
+  assert.equal(result.shot, "make");
+  assert.equal(result.reason, "rim-proximity-exit");
+  assert.ok(result.confidence >= MIN_AUTOMATIC_DECISION_CONFIDENCE);
+});
+
+test("does not recover a right-adjacent airball as a make", () => {
+  let state = createTrackerEngineState();
+  state = step(state, ball(0.65, 0.42, 0), 0).state;
+  state = step(state, ball(0.65, 0.17, 100), 100).state;
+  state = step(state, ball(0.65, 0.12, 200), 200).state;
+  const result = step(state, ball(0.65, 0.25, 450), 450);
+  assert.equal(result.shot, "miss");
+  assert.equal(result.reason, "airball");
+});
+
 test("suppresses duplicate shot events during the cooldown", () => {
   let state = createTrackerEngineState();
   state = step(state, ball(0.5, 0.42, 0), 0).state;

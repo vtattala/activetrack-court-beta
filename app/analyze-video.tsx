@@ -365,7 +365,7 @@ export default function AnalyzeVideoScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No video selected</Text>
             <Text style={styles.emptyBody}>
-              Select a stationary landscape recording up to {MAX_IMPORT_DURATION_SECONDS / 60} minutes long with the rim and complete ball flight visible.
+              Select a fixed-camera landscape recording up to {MAX_IMPORT_DURATION_SECONDS / 60} minutes long. Keep the device still and the rim plus complete ball flight visible for every shot.
             </Text>
           </View>
         )}
@@ -442,7 +442,7 @@ export default function AnalyzeVideoScreen() {
               <View style={styles.noShots}>
                 <Text style={styles.noShotsTitle}>No complete shot trajectories found</Text>
                 <Text style={styles.noShotsBody}>
-                  No complete entry-and-exit sequence was found. Review the automatic hoop box; use Adjust rim only if it is visibly off target, then analyze again.
+                  No complete near-rim and below-net sequence was found. Confirm the camera stayed fixed, review the automatic hoop box, and use Adjust rim only if it is visibly off target.
                 </Text>
               </View>
             ) : (
@@ -552,6 +552,7 @@ function formatDecisionReason(reason: string): string {
   switch (reason) {
     case "rim-crossing": return "center crossed rim plane";
     case "rim-entry-exit": return "ball entered the rim and exited below the net";
+    case "rim-proximity-exit": return "near-rim descent confirmed by centered net exit";
     case "rim-entry-lost": return "rim entry found; net exit needs review";
     case "airball": return "outside rim opening";
     case "lost": return "ball lost after release";
